@@ -1346,6 +1346,15 @@ select.px-input option { background: var(--panel2); }
 // ═══════════════════════════════════════════
 const VALID_POS = ['SP','RP','C','1B','2B','3B','SS','OF','DH'];
 
+function renderAll() {
+  renderRoster();
+  renderFA();
+  renderDraft();
+  renderFinance();
+  renderStandings();
+  renderDashboard();
+}
+
 function statColor(ovr) {
   if (ovr >= 90) return '#f5a623';
   if (ovr >= 80) return '#4ade80';
@@ -4862,7 +4871,7 @@ if (document.readyState !== 'loading') restoreGeminiKey();
 
 // ── Gemini API 호출 (flash-lite — 빠르고 무료)
 async function callGemini(prompt) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: 300, temperature: 0.7 }
