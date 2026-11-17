@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>야구9단 매니저</title>
+<style>
+  :root { --bg:#0d0d0d; --panel:#1a1a2e; --line:#333; --gold:#f5a623; --green:#4ade80; --red:#ef4444;
+          --blue:#38bdf8; --muted:#64748b; --text:#e2e8f0; --dim:#94a3b8; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif; font-size:13px; }
+  header { display:flex; align-items:center; gap:12px; padding:10px 16px; background:#0a0a1a; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:15px; color:var(--gold); margin:0; }
+  header .spacer { flex:1; }
+  header .info { color:var(--dim); }
+  main { padding:14px; max-width:1200px; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px; margin-bottom:12px; }
+  .title { color:var(--gold); font-weight:bold; font-size:13px; margin:0 0 8px; }
+  .muted { color:var(--muted); }
+  button { background:#334155; color:#fff; border:0; border-radius:4px; padding:7px 12px; cursor:pointer; font-size:12px; }
+  button:disabled { opacity:.35; cursor:not-allowed; }
+  button.gold { background:var(--gold); color:#000; font-weight:bold; }
+  button.red { background:#b91c1c; }
+  button.green { background:#117a65; }
+  button.brown { background:#7c4a03; }
+  button.deep { background:#7c2d12; }
+  select, input { background:#1e293b; color:var(--text); border:1px solid #334155; border-radius:4px; padding:5px 8px; font-size:12px; }
+  table { border-collapse:collapse; }
+  td, th { padding:4px 8px; text-align:center; }
+  th { color:var(--muted); font-weight:normal; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .hidden { display:none !important; }
+  /* 경기 화면 */
+  .score { text-align:center; padding:8px; background:#001800; border:1px solid #16a34a; border-radius:6px; margin-bottom:12px; }
+  .score .big { font-size:26px; font-weight:bold; color:var(--green); }
+  .score .names { color:var(--green); font-weight:bold; font-size:14px; }
+  .score .state { color:#86efac; margin-top:4px; }
+  .linescore td { font-size:12px; min-width:22px; }
+  .linescore .team { text-align:left; min-width:90px; }
+  .gameLayout { display:grid; grid-template-columns: 1fr 270px; gap:12px; }
+  #field { width:100%; height:220px; display:block; background:#06140a; border-radius:6px; }
+  #log { height:260px; overflow-y:auto; background:#000e00; border:1px solid #14532d; border-radius:6px; padding:8px; font-family: ui-monospace, Menlo, monospace; font-size:12px; }
+  #log div { margin-bottom:3px; line-height:1.45; }
+  .k-PITCH { color:#e2e8f0; } .k-HIT { color:var(--green); font-weight:bold; } .k-OUT { color:#cbd5e1; }
+  .k-WALK { color:var(--blue); } .k-STEAL { color:#facc15; } .k-MANAGER { color:var(--gold); font-weight:bold; }
+  .k-COLOR { color:#a78bfa; font-style:italic; } .k-INNING { color:#fb923c; font-weight:bold; border-top:1px solid #14532d; padding-top:4px; }
+  .k-SCORE { color:var(--red); font-weight:bold; } .k-END { color:var(--gold); font-size:15px; font-weight:bold; } .k-NEUTRAL { color:var(--dim); }
+  .banner { padding:7px 12px; border-radius:4px; margin-bottom:10px; font-weight:bold; background:#111827; color:var(--dim); }
+  .banner.alert { background:var(--gold); color:#0d0d0d; }
+  .banner.auto { background:#134e4a; color:var(--text); }
+  .rp { font-size:12px; }
+  .rp li { list-style:none; padding:2px 0; }
+  .rp ul { padding:0; margin:0; }
+  .cur { color:var(--gold); font-weight:bold; }
+  .controls { margin-top:10px; display:flex; flex-direction:column; gap:8px; }
+  .lbl { color:var(--dim); font-size:12px; }
+  .box td, .box th { font-size:12px; }
+  @media (max-width: 860px) { .gameLayout, .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚾ 야구9단 매니저</h1>
+  <span class="info" id="teamInfo"></span>
+  <span class="spacer"></span>
+  <span class="info" id="recordInfo"></span>
+</header>
+
+<main>
+  <!-- 셋업 화면 -->
+  <section id="setup">
+    <div class="panel">
+      <p class="title">📋 로스터 구성</p>
+      <div class="row">
+        <span class="lbl">선수 강도</span>
+        <select id="strength">
+          <option value="65,75">약체 (OVR 65~75)</option>
+          <option value="75,85" selected>중위권 (OVR 75~85)</option>
+          <option value="85,95">강팀 (OVR 85~95)</option>
+        </select>
+        <button id="btnReset">새 로스터 구성</button>
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        <div>
+          <p class="lbl">타순 (▲▼로 순서 변경)</p>
+          <ol id="lineupEdit" style="padding-left:18px"></ol>
+          <p class="lbl" style="margin-top:12px">벤치 (대타·대주자 후보)</p>
+          <div id="benchList" class="rp"></div>
+        </div>
+        <div>
+          <p class="lbl">선발 투수</p>
+          <select id="starterSel" style="width:100%"></select>
+          <p class="lbl" style="margin-top:12px">불펜</p>
+          <div id="pitchList" class="rp"></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <p class="title">🎮 경기 설정</p>
+      <div class="row">
+        <span class="lbl">상대팀</span><select id="oppSel" style="min-width:220px"></select>
+        <span class="lbl">난이도</span><select id="diffSel"></select>
+        <button class="gold" id="btnStart">▶ 경기 시작</button>
+      </div>
+      <p class="muted" id="setupMsg" style="margin-top:10px"></p>
+    </div>
+    <div class="panel">
+      <p class="title">최근 경기</p>
+      <div id="recent" class="muted">아직 경기 기록이 없습니다.</div>
+    </div>
+  </section>
+
+  <!-- 경기 화면 -->
+  <section id="game" class="hidden">
+    <div class="score">
+      <div class="row" style="justify-content:center">
+        <span class="names" id="sbMine"></span>
+        <span class="big" id="sbMineScore">0</span>
+        <span style="color:#166534;font-size:20px">:</span>
+        <span class="big" id="sbTheirScore">0</span>
+        <span class="names" id="sbTheirs"></span>
+      </div>
+      <div class="state" id="sbState"></div>
+      <div style="overflow-x:auto;margin-top:6px"><table class="linescore" id="linescore"></table></div>
+    </div>
+
+    <div class="banner" id="banner"></div>
+
+    <div class="gameLayout">
+      <div>
+        <canvas id="field" height="220"></canvas>
+        <div id="log" style="margin-top:10px"></div>
+      </div>
+      <div class="panel" style="margin:0">
+        <p class="title">📋 우리 타순</p>
+        <ol id="myLineup" class="rp" style="padding-left:18px;margin:0"></ol>
+        <p class="title" style="margin-top:12px">⚾ 우리 투수</p>
+        <div id="myPitcher" class="rp"></div>
+        <p class="title" style="margin-top:12px">⚾ 상대 투수</p>
+        <div id="oppPitcher" class="rp"></div>
+      </div>
+    </div>
+
+    <div class="panel controls">
+      <div class="row">
+        <button id="btnOne">▶ 한 구</button>
+        <button id="btnAtBat">⏭ 한 타석</button>
+        <button id="btnInning">⏩ 이닝</button>
+        <button class="green" id="btnAuto">▶ 자동 중계</button>
+        <span class="lbl">속도</span>
+        <select id="speedSel">
+          <option value="1600">느리게</option>
+          <option value="900" selected>보통</option>
+          <option value="400">빠르게</option>
+        </select>
+        <button class="deep" id="btnGame">🏁 끝까지</button>
+      </div>
+      <div class="row">
+        <button class="brown" id="btnBunt">🥎 번트</button>
+        <select id="stealBase"></select>
+        <button class="brown" id="btnSteal">🏃 도루</button>
+        <select id="pinchSel"></select>
+        <button class="brown" id="btnPinchHit">🔁 대타</button>
+        <select id="pinchRunBase"></select>
+        <button class="brown" id="btnPinchRun">🏃 대주자</button>
+        <button class="brown" id="btnIbb">🚫 고의4구</button>
+        <select id="pitcherSel"></select>
+        <button class="brown" id="btnPitcher">🔄 투수 교체</button>
+        <span class="lbl">구종 사인(수비)</span>
+        <select id="callSel"></select>
+      </div>
+    </div>
+  </section>
+
+  <!-- 결과 화면 -->
+  <section id="result" class="hidden">
+    <div class="panel" style="text-align:center">
+      <div id="resTitle" style="font-size:34px;font-weight:bold"></div>
+      <div id="resScore" style="font-size:18px;margin-top:6px"></div>
+      <div id="resDetail" class="muted" style="margin-top:4px"></div>
+      <div style="overflow-x:auto;margin:12px 0"><table class="linescore" id="resLinescore" style="margin:0 auto"></table></div>
+      <div class="grid2" style="text-align:left">
+        <div class="panel box"><p class="title" id="boxMineTitle"></p><table id="boxMine"></table></div>
+        <div class="panel box"><p class="title" id="boxTheirsTitle"></p><table id="boxTheirs"></table></div>
+      </div>
+      <div class="row" style="justify-content:center;margin-top:8px">
+        <button id="btnBack">← 로스터로 돌아가기</button>
+        <button class="gold" id="btnAgain">다시 경기 ▶</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const KIND_LABEL = {};
+  let league = null;      // /api/league
+  let gameId = null;      // 현재 경기
+  let state = null;       // 마지막 상태
+  let autoTimer = null;
+  let ackNext = false;    // 판단 지점 재개 시 다음 호출에 ack
+  let busy = false;
+  let manualLineup = null; // 셋업 화면 타순 (id 배열)
+
+  async function api(method, url, body) {
+    const opt = { method, headers: {} };
+    if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+    const r = await fetch(url, opt);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ('요청 실패 ' + r.status));
+    return data;
+  }
+
+  function showSection(name) {
+    ['setup', 'game', 'result'].forEach(s => $(s).classList.toggle('hidden', s !== name));
+  }
+
+  function setMsg(msg) { $('setupMsg').textContent = msg || ''; }
+
+  // ── 셋업 ─────────────────────────────────────────────
+  async function loadLeague() {
+    league = await api('GET', '/api/league');
+    renderLeague();
+  }
+
+  function renderLeague() {
+    $('teamInfo').textContent = league.teamName;
+    $('recordInfo').textContent = `${league.record.wins}승 ${league.record.losses}패`;
+
+    const hitters = league.roster.filter(p => p.pos !== 'SP' && p.pos !== 'RP');
+    const pitchers = league.roster.filter(p => p.pos === 'SP' || p.pos === 'RP');
+    if (!manualLineup || manualLineup.some(id => !hitters.find(p => p.id === id))) {
+      manualLineup = [...hitters].sort((a, b) => b.effOvr - a.effOvr).slice(0, 9).map(p => p.id);
+    }
+    renderLineupEdit(hitters);
+    renderBench(hitters);
+
+    const starterSel = $('starterSel');
+    const prevStarter = starterSel.value;
+    starterSel.innerHTML = '';
+    [...pitchers].sort((a, b) => (a.pos === 'SP' ? 0 : 1) - (b.pos === 'SP' ? 0 : 1) || a.fatigue - b.fatigue).forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = `${p.name} (${p.pos}) OVR ${p.effOvr} · 피로 ${p.fatigue}%`;
+      starterSel.appendChild(o);
+    });
+    if (prevStarter) starterSel.value = prevStarter;
+
+    $('pitchList').innerHTML = '<ul>' + pitchers.map(p => `<li>${p.name} (${p.pos}) · OVR ${p.effOvr} · 피로 ${p.fatigue}%</li>`).join('') + '</ul>';
+
+    const oppSel = $('oppSel');
+    if (!oppSel.options.length) {
+      league.opponents.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; oppSel.appendChild(o); });
+      const dsel = $('diffSel');
+      league.difficulties.forEach(d => { const o = document.createElement('option'); o.value = d.id; o.textContent = d.label; dsel.appendChild(o); });
+      dsel.value = 'NORMAL';
+    }
+
+    $('recent').innerHTML = league.recent.length
+      ? league.recent.map(g => `<div>vs ${g.opponent} <b style="color:${g.result === '승' ? 'var(--green)' : 'var(--red)'}">${g.result}</b> ${g.score}</div>`).join('')
+      : '아직 경기 기록이 없습니다.';
+  }
+
+  function renderLineupEdit(hitters) {
+    const ol = $('lineupEdit');
+    ol.innerHTML = '';
+    manualLineup.forEach((id, i) => {
+      const p = hitters.find(x => x.id === id);
+      const li = document.createElement('li');
+      li.style.marginBottom = '4px';
+      li.innerHTML = `<span class="muted">[${p.pos}]</span> ${p.name} <span class="muted">OVR ${p.effOvr}</span> `;
+      const up = mkBtn('▲', () => { if (i > 0) { [manualLineup[i - 1], manualLineup[i]] = [manualLineup[i], manualLineup[i - 1]]; renderLeague(); } });
+      const dn = mkBtn('▼', () => { if (i < manualLineup.length - 1) { [manualLineup[i + 1], manualLineup[i]] = [manualLineup[i], manualLineup[i + 1]]; renderLeague(); } });
+      up.disabled = i === 0; dn.disabled = i === manualLineup.length - 1;
+      li.append(up, ' ', dn);
+      ol.appendChild(li);
+    });
+  }
+
+  function renderBench(hitters) {
+    const inLineup = new Set(manualLineup);
+    const bench = hitters.filter(p => !inLineup.has(p.id));
+    $('benchList').innerHTML = bench.length
+      ? '<ul>' + bench.map(p => `<li>${p.name} [${p.pos}] · OVR ${p.effOvr}</li>`).join('') + '</ul>'
+      : '<span class="muted">벤치 없음</span>';
+  }
+
+  function mkBtn(text, fn) {
+    const b = document.createElement('button');
+    b.textContent = text;
+    b.style.padding = '2px 7px';
+    b.onclick = fn;
+    return b;
+  }
+
+  $('btnReset').onclick = async () => {
+    const [lo, hi] = $('strength').value.split(',').map(Number);
+    manualLineup = null;
+    try { league = await api('POST', '/api/league/reset', { minOvr: lo, maxOvr: hi }); renderLeague(); setMsg('새 로스터를 구성했습니다.'); }
+    catch (e) { setMsg(e.message); }
+  };
+
+  $('btnStart').onclick = async () => {
+    setMsg('');
+    try {
+      const res = await api('POST', '/api/game', {
+        opponent: $('oppSel').value,
+        difficulty: $('diffSel').value,
+        starter: $('starterSel').value,
+        lineup: manualLineup,
+      });
+      gameId = res.state.gameId;
+      showSection('game');
+      state = res.state;
+      $('log').innerHTML = '';
+      appendLines(res.lines);
+      render();
+    } catch (e) { setMsg(e.message); }
+  };
+
+  // ── 경기 진행 ────────────────────────────────────────
+  function appendLines(lines) {
+    const log = $('log');
+    lines.forEach(l => {
+      const d = document.createElement('div');
+      d.className = 'k-' + l.kind;
+      d.textContent = l.text;
+      log.appendChild(d);
+    });
+    while (log.children.length > 600) log.removeChild(log.firstChild);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function advance(mode, opts = {}) {
+    if (!gameId || busy) return;
+    busy = true;
+    try {
+      const ack = ackNext || !!opts.ack;
+      ackNext = false;
+      const res = await api('POST', `/api/game/${gameId}/advance`, {
+        mode, ack, stopAtDecision: !!opts.stop,
+      });
+      if (res.paused) {
+        stopAuto();
+        state = res.state;
+        render();
+        return;
+      }
+      state = res.state;
+      appendLines(res.lines);
+      render();
+      if (res.state.done) onGameOver();
+    } catch (e) {
+      stopAuto();
+      setMsg(e.message);
+    } finally { busy = false; }
+  }
+
+  function startAuto() {
+    ackNext = true;                       // 판단 지점에서 재개할 때 현재 타석은 그대로 진행
+    stopAuto();
+    $('btnAuto').textContent = '⏸ 일시정지';
+    $('btnAuto').className = 'red';
+    autoTimer = setInterval(() => advance('pitch', { stop: true }), Number($('speedSel').value));
+  }
+
+  function stopAuto() {
+    if (autoTimer) clearInterval(autoTimer);
+    autoTimer = null;
+    $('btnAuto').textContent = '▶ 자동 중계';
+    $('btnAuto').className = 'green';
+  }
+
+  $('btnAuto').onclick = () => { if (autoTimer) { stopAuto(); render(); } else { startAuto(); render(); } };
+  $('speedSel').onchange = () => { if (autoTimer) startAuto(); };
+  $('btnOne').onclick = () => { stopAuto(); advance('pitch', { ack: true }); };
+  $('btnAtBat').onclick = () => { stopAuto(); advance('atbat', { ack: true }); };
+  $('btnInning').onclick = () => { stopAuto(); advance('inning', { ack: true, stop: true }); };
+  $('btnGame').onclick = () => { stopAuto(); advance('game', { ack: true }); };
+
+  async function order(body) {
+    stopAuto();
+    try {
+      const res = await api('POST', `/api/game/${gameId}/order`, body);
+      state = res.state;
+      appendLines(res.lines);
+      render();
+    } catch (e) {
+      setMsg(e.message);
+      if (e.message) alert(e.message);
+      if (state) render();
+    }
+  }
+
+  $('btnBunt').onclick = () => order({ type: 'bunt' });
+  $('btnSteal').onclick = () => order({ type: 'steal', base: Number($('stealBase').value) });
+  $('btnPinchHit').onclick = () => order({ type: 'pinch_hit', id: $('pinchSel').value });
+  $('btnPinchRun').onclick = () => order({ type: 'pinch_run', base: Number($('pinchRunBase').value), id: $('pinchSel').value });
+  $('btnIbb').onclick = () => order({ type: 'ibb' });
+  $('btnPitcher').onclick = () => order({ type: 'pitcher', id: $('pitcherSel').value });
+  $('callSel').onchange = () => order({ type: 'pitch_call', call: $('callSel').value });
+
+  function fillSelect(sel, items, valueFn, labelFn, keep) {
+    const prev = sel.value;
+    sel.innerHTML = '';
+    items.forEach(it => { const o = document.createElement('option'); o.value = valueFn(it); o.textContent = labelFn(it); sel.appendChild(o); });
+    if (keep && prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  }
+
+  // ── 렌더링 ───────────────────────────────────────────
+  function render() {
+    if (!state) return;
+    const s = state;
+    $('sbMine').textContent = s.myName;
+    $('sbTheirs').textContent = s.opponent;
+    $('sbMineScore').textContent = s.score.mine;
+    $('sbTheirScore').textContent = s.score.theirs;
+    $('sbState').textContent = `${s.inning}회${s.top ? '초 ▲ 공격' : '말 ▼ 공격'}  |  ${s.outs}아웃  B${s.balls} S${s.strikes}  |  투구 ${s.pitchTotal}`;
+
+    // 이닝별 득점판
+    const cols = s.innings;
+    let html = '<tr><th class="team">팀</th>';
+    for (let i = 0; i < cols; i++) html += `<th>${i + 1}</th>`;
+    html += '<th>R</th><th>H</th></tr>';
+    const row = (name, arr, r, h) => `<tr><td class="team">${name}</td>` +
+      arr.map(v => `<td>${v === null || v === undefined ? '' : v}</td>`).join('') +
+      `<td style="color:var(--green);font-weight:bold">${r}</td><td>${h}</td></tr>`;
+    html += row(s.myName, s.linescore.mine, s.score.mine, s.hits.mine);
+    html += row(s.opponent, s.linescore.theirs, s.score.theirs, s.hits.theirs);
+    $('linescore').innerHTML = html;
+
+    // 배너
+    const b = $('banner');
+    if (s.done) { b.className = 'banner alert'; b.textContent = '🏁 경기 종료'; }
+    else if (autoTimer) { b.className = 'banner auto'; b.textContent = '▶ 자동 중계 중 — 감독 판단이 필요하면 자동으로 멈춥니다'; }
+    else if (s.needsDecision) {
+      b.className = 'banner alert';
+      b.textContent = s.top
+        ? '🧠 주자 상황입니다! 번트·도루·대타·대주자를 판단하거나 ▶ 한 구로 진행하세요'
+        : '🧠 우리 투수 체력이 떨어졌습니다. 투수 교체를 고려하거나 ▶ 한 구로 진행하세요';
+    } else {
+      b.className = 'banner';
+      b.textContent = s.top ? '⚾ 공격 중 — 감독 사인을 낼 수 있습니다' : '⚾ 수비 중 — 구종 사인과 투수 교체를 지시할 수 있습니다';
+    }
+
+    drawField(s);
+
+    // 우리 타순
+    $('myLineup').innerHTML = s.lineup.map((p, i) =>
+      `<li class="${p.current ? 'cur' : ''}">${p.current ? '▶ ' : ''}${i + 1}. ${p.name} [${p.pos}] ${p.effOvr}</li>`).join('');
+
+    $('myPitcher').innerHTML = pitcherHtml(s.myPitcher, '#4ade80');
+    $('oppPitcher').innerHTML = pitcherHtml(s.oppPitcher, '#fca5a5');
+
+    renderOrders(s);
+    if (s.done) showResult(s);
+  }
+
+  function pitcherHtml(p, color) {
+    if (!p) return '<span class="muted">-</span>';
+    const hpColor = p.hp > 60 ? 'var(--green)' : p.hp > 35 ? 'var(--gold)' : 'var(--red)';
+    return `<div style="color:${color};font-weight:bold">${p.name} (${p.pos})</div>` +
+      `<div style="color:${hpColor}">체력 ${p.hp}%  피로 ${p.fatigue}%</div>` +
+      `<div class="muted">${p.inn}이닝 · ${p.pitches}구 · ${p.hits}피안타 · ${p.runs}실점 · ${p.ks}삼진 · ${p.walks}볼넷</div>`;
+  }
+
+  function renderOrders(s) {
+    const over = s.done;
+    const atk = s.top;
+    $('btnOne').disabled = over; $('btnAtBat').disabled = over; $('btnInning').disabled = over;
+    $('btnAuto').disabled = over; $('btnGame').disabled = over;
+
+    $('btnBunt').disabled = over || !s.canBunt;
+
+    fillSelect($('stealBase'), s.stealable, b => b, b => `${b + 1}루 주자 → ${b + 2}루`, false);
+    $('stealBase').disabled = over || !s.stealable.length;
+    $('btnSteal').disabled = over || !s.stealable.length;
+
+    const bench = s.bench;
+    fillSelect($('pinchSel'), bench, p => p.id, p => `${p.name} [${p.pos}] OVR ${p.effOvr}`, true);
+    $('pinchSel').disabled = over || !atk || !bench.length;
+    $('btnPinchHit').disabled = over || !atk || !bench.length;
+    const runnerBases = s.runners.map((r, i) => r ? i : -1).filter(i => i >= 0);
+    fillSelect($('pinchRunBase'), runnerBases, b => b, b => `${b + 1}루 주자 (${s.runners[b]})`, false);
+    $('pinchRunBase').disabled = over || !atk || !runnerBases.length || !bench.length;
+    $('btnPinchRun').disabled = over || !atk || !runnerBases.length || !bench.length;
+
+    $('btnIbb').disabled = over || !s.canIbb;
+
+    const bullpen = s.bullpen;
+    fillSelect($('pitcherSel'), bullpen, p => p.id, p => `${p.name} (${p.pos}) 체력 ${p.hp} · 피로 ${p.fatigue}`, true);
+    $('pitcherSel').disabled = over || atk || !bullpen.length;
+    $('btnPitcher').disabled = over || atk || !bullpen.length;
+
+    fillSelect($('callSel'), s.pitchCalls, c => c.id, c => c.label, false);
+    $('callSel').value = s.pitchCall;
+    $('callSel').disabled = over || atk;
+  }
+
+  // ── 야구장 캔버스 ────────────────────────────────────
+  function drawField(s) {
+    const cv = $('field');
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== w) cv.width = w;
+    if (cv.height !== h) cv.height = h;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#06140a'; g.fillRect(0, 0, w, h);
+    const cx = w / 2, homeY = h * 0.82, d = h * 0.22, R = d * 3.2;
+    g.fillStyle = '#14532d';
+    g.beginPath(); g.arc(cx, homeY, R, Math.PI, 2 * Math.PI); g.closePath(); g.fill();
+    g.fillStyle = '#a16207';
+    g.beginPath(); g.moveTo(cx, homeY); g.lineTo(cx + d * 1.1, homeY - d * 1.1); g.lineTo(cx, homeY - d * 2.2); g.lineTo(cx - d * 1.1, homeY - d * 1.1); g.closePath(); g.fill();
+    g.fillStyle = '#15803d';
+    g.beginPath(); g.moveTo(cx, homeY - d * 0.1); g.lineTo(cx + d, homeY - d); g.lineTo(cx, homeY - 2 * d); g.lineTo(cx - d, homeY - d); g.closePath(); g.fill();
+    g.strokeStyle = '#e5e7eb'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(cx, homeY); g.lineTo(cx + d, homeY - d); g.lineTo(cx, homeY - 2 * d); g.lineTo(cx - d, homeY - d); g.closePath(); g.stroke();
+    const bases = [[cx + d, homeY - d], [cx, homeY - 2 * d], [cx - d, homeY - d]];
+    g.fillStyle = '#fff';
+    bases.forEach(([x, y]) => g.fillRect(x - 5, y - 5, 10, 10));
+    g.fillRect(cx - 5, homeY - 5, 10, 10);
+    s.runners.forEach((name, i) => {
+      if (!name) return;
+      const [x, y] = bases[i];
+      g.fillStyle = '#f5a623'; g.beginPath(); g.arc(x, y, 9, 0, 2 * Math.PI); g.fill();
+      g.strokeStyle = '#111827'; g.stroke();
+      g.fillStyle = '#fde68a'; g.font = 'bold 11px sans-serif'; g.textAlign = 'center';
+      g.fillText(name.slice(0, 4), x, y - 14);
+    });
+    g.textAlign = 'left'; g.fillStyle = '#e2e8f0'; g.font = 'bold 12px sans-serif';
+    g.fillText('타자  ' + (s.batter ? s.batter.name : '-'), 8, 16);
+    g.fillText('투수  ' + (s.defending === s.myName ? (s.myPitcher ? s.myPitcher.name : '-') : (s.oppPitcher ? s.oppPitcher.name : '-')), 8, 32);
+    // B-S-O 표시등
+    const lx = w - 120, ly = h - 58;
+    g.fillStyle = '#94a3b8'; g.font = 'bold 12px sans-serif';
+    g.fillText('B', lx, ly + 10); g.fillText('S', lx, ly + 28); g.fillText('O', lx, ly + 46);
+    const lamp = (x, y, on, c) => { g.fillStyle = on ? c : '#1f2937'; g.beginPath(); g.arc(x + 6, y + 7, 5.5, 0, 2 * Math.PI); g.fill(); };
+    for (let i = 0; i < 4; i++) lamp(lx + 22 + i * 18, ly, i < s.balls, '#22c55e');
+    for (let i = 0; i < 3; i++) lamp(lx + 22 + i * 18, ly + 18, i < s.strikes, '#facc15');
+    for (let i = 0; i < 3; i++) lamp(lx + 22 + i * 18, ly + 36, i < s.outs, '#ef4444');
+    g.fillStyle = '#f5a623'; g.font = 'bold 13px sans-serif';
+    g.fillText(`${s.inning}회 ${s.top ? '초 ▲' : '말 ▼'}`, 8, h - 10);
+  }
+
+  // ── 결과 ─────────────────────────────────────────────
+  function onGameOver() {
+    stopAuto();
+    loadLeague().catch(() => {});
+  }
+
+  function showResult(s) {
+    const win = s.score.mine > s.score.theirs;
+    $('resTitle').textContent = win ? '🏆 승리!' : '😢 패배';
+    $('resTitle').style.color = win ? 'var(--gold)' : 'var(--red)';
+    $('resScore').textContent = `${s.myName}  ${s.score.mine} : ${s.score.theirs}  ${s.opponent}`;
+    $('resDetail').textContent = `안타 ${s.hits.mine} | ${s.hits.theirs}  ·  ${s.inning > 9 ? '연장 ' : ''}${s.inning}회 종료  ·  투구 ${s.pitchTotal}`;
+    const cols = s.innings;
+    let html = '<tr><th class="team">팀</th>';
+    for (let i = 0; i < cols; i++) html += `<th>${i + 1}</th>`;
+    html += '<th>R</th><th>H</th></tr>';
+    const row = (name, arr, r, h) => `<tr><td class="team">${name}</td>` + arr.map(v => `<td>${v ?? ''}</td>`).join('') + `<td>${r}</td><td>${h}</td></tr>`;
+    html += row(s.myName, s.linescore.mine, s.score.mine, s.hits.mine) + row(s.opponent, s.linescore.theirs, s.score.theirs, s.hits.theirs);
+    $('resLinescore').innerHTML = html;
+    const boxTable = list => '<tr><th style="text-align:left">투수</th><th>이닝</th><th>투구</th><th>피안타</th><th>실점</th><th>볼넷</th><th>삼진</th></tr>' +
+      list.map(p => `<tr><td style="text-align:left">${p.name}</td><td>${p.inn}</td><td>${p.pitches}</td><td>${p.hits}</td><td>${p.runs}</td><td>${p.walks}</td><td>${p.ks}</td></tr>`).join('');
+    $('boxMineTitle').textContent = `⚾ ${s.myName} 투수 기록`;
+    $('boxTheirsTitle').textContent = `⚾ ${s.opponent} 투수 기록`;
+    $('boxMine').innerHTML = boxTable(s.box.mine);
+    $('boxTheirs').innerHTML = boxTable(s.box.theirs);
+    showSection('result');
+  }
+
+  $('btnBack').onclick = async () => { gameId = null; state = null; showSection('setup'); await loadLeague(); };
+  $('btnAgain').onclick = async () => { gameId = null; state = null; showSection('setup'); await loadLeague(); };
+
+  showSection('setup');
+  loadLeague().catch(e => setMsg(e.message));
+})();
+</script>
+</body>
+</html>
