@@ -122,7 +122,7 @@
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 
   /* 탭 + 시즌 화면 */
-  nav.tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px; }
+  nav.tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px; }
   nav.tabs button { min-height: 40px; padding: 6px 4px; font-size: 13px; background: var(--panel); border-color: var(--line); }
   nav.tabs button[aria-current="page"] { background: var(--panel-2); color: var(--gold); border-color: var(--gold); font-weight: 700; }
   body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
@@ -146,6 +146,13 @@
   .train-row .sub { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
   .savebar { color: var(--muted); font-size: 12px; margin-top: 4px; }
   .newsline { font-size: 13px; padding-block: 2px; font-variant-numeric: tabular-nums; }
+  .lg { font-size: 10.5px; padding: 1px 5px; border-radius: 4px; margin-left: 4px; vertical-align: 1px; font-weight: 700; }
+  .lg-KBO { background: #1d3a5a; color: #9cc9f5; } .lg-NPB { background: #5a1d2a; color: #f5a3b5; } .lg-MLB { background: #1d4a2f; color: #a3f5bd; }
+  .scout-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding-block: 8px; border-bottom: 1px solid var(--line); }
+  .scout-row:last-child { border-bottom: 0; }
+  .scout-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  .scout-filters input { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font-size: 14px; min-height: 42px; min-width: 0; font-family: inherit; }
+  @media (max-width: 520px) { nav.tabs button { font-size: 12px; padding: 6px 2px; } .scout-filters { grid-template-columns: 1fr 1fr; } .scout-filters input { grid-column: 1 / -1; } }
 </style>
 
 <header>
@@ -162,6 +169,7 @@
     <button data-tab="stand">📊 순위</button>
     <button data-tab="stats">📈 기록</button>
     <button data-tab="train">💪 훈련</button>
+    <button data-tab="scout">🔍 영입</button>
   </nav>
 
   <!-- 홈 -->
@@ -195,13 +203,15 @@
       <div class="row">
         <label class="lbl" for="lenSel">경기 수</label>
         <select id="lenSel"><option value="18">18경기</option><option value="36" selected>36경기</option><option value="72">72경기</option><option value="144">144경기</option></select>
+        <label class="lbl" for="modeSel">리그</label>
+        <select id="modeSel"><option value="current" selected>현역 리그 (2025 실제 소속)</option><option value="legend">역대 레전드 리그</option></select>
         <label class="lbl" for="strength">우리 팀 강도</label>
-        <select id="strength"><option value="65,75">약체</option><option value="75,85" selected>중위권</option><option value="85,95">강팀</option></select>
+        <select id="strength"><option value="weak">약체</option><option value="mid" selected>중위권</option><option value="strong">강팀</option></select>
         <label class="lbl" for="diffSel">난이도</label>
         <select id="diffSel"><option value="EASY">쉬움</option><option value="NORMAL" selected>보통</option><option value="HARD">어려움</option></select>
         <button id="btnNewLeague">새 리그 시작</button>
       </div>
-      <p class="muted" style="margin:8px 0 0">새 리그를 시작하면 지금 시즌 기록이 지워집니다. 버튼을 한 번 더 눌러야 시작됩니다.</p>
+      <p class="muted" style="margin:8px 0 0">상대 9개 구단은 KBO 실존 선수로 채워집니다. 현역 리그는 2025년 소속, 레전드 리그는 가장 오래 뛴 구단 기준입니다. 우리 팀은 KBO·NPB·MLB 전체에서 뽑습니다. 새 리그를 시작하면 지금 시즌 기록이 지워지며, 버튼을 한 번 더 눌러야 시작됩니다.</p>
     </div>
   </section>
 
@@ -314,6 +324,21 @@
     <div class="panel"><p class="title">⚾ 우리 팀 투수</p><div class="scroll-x"><table class="stats" id="myPit"></table></div></div>
   </section>
 
+  <!-- 영입 -->
+  <section id="scout" hidden>
+    <div class="panel">
+      <p class="title" id="scoutTitle">🔍 선수 영입</p>
+      <p class="muted" style="margin:0 0 10px">KBO·NPB·MLB 역대 선수 전체에서 찾을 수 있습니다. 능력치는 실제 기록(리그 평균 대비 OPS·평균자책점)으로 계산했습니다. 다른 구단 소속 선수는 데려올 수 없습니다.</p>
+      <div class="scout-filters">
+        <input id="scoutQ" type="search" placeholder="이름 검색 (예: 이승엽, Ichiro, Ruth)" autocomplete="off">
+        <select id="scoutLeague" aria-label="리그"><option value="">전체 리그</option><option value="KBO">KBO</option><option value="NPB">NPB</option><option value="MLB">MLB</option></select>
+        <select id="scoutPos" aria-label="포지션"><option value="">전체 포지션</option><option value="P">투수 전체</option><option value="SP">선발 SP</option><option value="RP">불펜 RP</option><option value="H">야수 전체</option><option value="C">포수 C</option><option value="1B">1루 1B</option><option value="2B">2루 2B</option><option value="3B">3루 3B</option><option value="SS">유격 SS</option><option value="OF">외야 OF</option><option value="DH">지명 DH</option></select>
+      </div>
+      <p class="savebar" id="scoutCount"></p>
+      <div id="scoutList"></div>
+    </div>
+  </section>
+
   <!-- 훈련 -->
   <section id="train" hidden>
     <div class="panel">
@@ -390,7 +415,7 @@
   }
 
   // ── 탭 ──
-  const SECTIONS = ['home', 'setup', 'game', 'result', 'stand', 'stats', 'train'];
+  const SECTIONS = ['home', 'setup', 'game', 'result', 'stand', 'stats', 'train', 'scout'];
   function show(section) {
     SECTIONS.forEach(s => { $(s).hidden = s !== section; });
   }
@@ -408,6 +433,7 @@
       if (tab === 'stand') renderStand();
       if (tab === 'stats') renderStats();
       if (tab === 'train') renderTrain();
+      if (tab === 'scout') renderScout();
     }
     window.scrollTo(0, 0);
   }
@@ -415,7 +441,7 @@
 
   function refreshHeader() {
     const s = api('GET', '/api/season');
-    $('seasonInfo').textContent = `${s.year} 시즌 · ${Math.min(s.day + 1, s.length)}/${s.length}일`;
+    $('seasonInfo').textContent = `${s.year} ${s.mode === 'legend' ? '레전드' : '현역'} 리그 · ${Math.min(s.day + 1, s.length)}/${s.length}일`;
     const me = s.standings.find(t => t.user);
     $('recordInfo').textContent = `${me.w}승 ${me.l}패 · ${me.rank}위`;
     return s;
@@ -481,8 +507,7 @@
     }
     clearTimeout(confirmTimer); confirmTimer = null; b.textContent = '새 리그 시작'; b.className = '';
     touched = true;
-    const [lo, hi] = $('strength').value.split(',').map(Number);
-    api('POST', '/api/season/new', { length: Number($('lenSel').value), minOvr: lo, maxOvr: hi, difficulty: $('diffSel').value });
+    api('POST', '/api/season/new', { length: Number($('lenSel').value), level: $('strength').value, mode: $('modeSel').value, difficulty: $('diffSel').value });
     state = null; gameId = null; manualLineup = null; stopAuto();
     save(); toast('새 리그를 시작했습니다'); renderHome();
   };
@@ -504,12 +529,12 @@
       const p = hitters.find(x => x.id === id);
       const li = document.createElement('li');
       li.style.marginBottom = '6px';
-      li.innerHTML = `<span class="muted">[${esc(p.pos)}]</span> ${esc(p.name)} <span class="muted">OVR ${p.effOvr} · 피로 ${p.fatigue}</span> `;
+      li.innerHTML = `<div style="display:flex;gap:6px;align-items:center"><span style="flex:1;min-width:0"><span class="muted">[${esc(p.pos)}]</span> ${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''} <span class="muted">OVR ${p.effOvr} · 피로 ${p.fatigue}</span></span><span class="mv" style="display:flex;gap:4px;flex:none"></span></div>`;
       const up = mkBtn('▲', () => { [manualLineup[i - 1], manualLineup[i]] = [manualLineup[i], manualLineup[i - 1]]; renderSetup(); });
       const dn = mkBtn('▼', () => { [manualLineup[i + 1], manualLineup[i]] = [manualLineup[i], manualLineup[i + 1]]; renderSetup(); });
       up.disabled = i === 0; dn.disabled = i === manualLineup.length - 1;
       up.setAttribute('aria-label', `${p.name} 타순 올리기`); dn.setAttribute('aria-label', `${p.name} 타순 내리기`);
-      li.append(up, ' ', dn);
+      li.querySelector('.mv').append(up, dn);
       ol.appendChild(li);
     });
     const inLineup = new Set(manualLineup);
@@ -761,7 +786,7 @@
       const row = document.createElement('div');
       row.className = 'train-row';
       const fColor = p.fatigue > 60 ? 'var(--red)' : p.fatigue > 35 ? 'var(--gold)' : 'var(--led)';
-      row.innerHTML = `<div><div class="nm">${esc(p.name)} <span class="muted">${esc(p.pos)} · ${p.age}세</span></div>` +
+      row.innerHTML = `<div><div class="nm">${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)}</span></div>` +
         `<div class="sub">OVR ${p.ovr} / 잠재력 ${p.potential} · <span style="color:${fColor}">피로 ${p.fatigue}%</span> · ${esc(p.condition)}</div></div>`;
       const up = document.createElement('button');
       up.className = 'order sm'; up.textContent = '능력 +1 (3P)';
@@ -771,7 +796,18 @@
       rest.className = 'sm'; rest.textContent = '휴식 (1P)';
       rest.disabled = lg.tp < 1 || p.fatigue === 0;
       rest.onclick = () => doTrain(p.id, 'rest');
-      row.append(up, rest);
+      const rel = document.createElement('button');
+      rel.className = 'sm'; rel.textContent = '방출';
+      rel.onclick = () => {
+        if (rel.dataset.armed) { doRelease(p.id); return; }
+        rel.dataset.armed = '1'; rel.textContent = '정말?'; rel.className = 'sm stop';
+        setTimeout(() => { if (rel.isConnected) { delete rel.dataset.armed; rel.textContent = '방출'; rel.className = 'sm'; } }, 3500);
+      };
+      const btns = document.createElement('div');
+      btns.style.display = 'flex'; btns.style.gap = '6px'; btns.style.flexWrap = 'wrap'; btns.style.justifyContent = 'flex-end';
+      btns.append(up, rest, rel);
+      row.style.gridTemplateColumns = 'minmax(0, 1fr) auto';
+      row.append(btns);
       list.appendChild(row);
     });
   }
@@ -784,6 +820,47 @@
     } catch (e) { toast(e.message); }
     renderTrain();
   }
+
+  function doRelease(id) {
+    touched = true;
+    try { const r = api('POST', '/api/release', { id }); toast(`${r.released} 선수를 방출했습니다`); save(); }
+    catch (e) { toast(e.message); }
+    renderTrain();
+  }
+
+  // ── 영입 ──
+  const lgTag = lg => lg ? `<span class="lg lg-${esc(lg)}">${esc(lg)}</span>` : '';
+  let scoutTimer = null;
+  function renderScout() {
+    const r = api('POST', '/api/scout/search', { q: $('scoutQ').value, league: $('scoutLeague').value, pos: $('scoutPos').value, limit: 50 });
+    $('scoutTitle').textContent = `🔍 선수 영입 · 훈련 포인트 ${r.tp} · 로스터 ${r.rosterSize}/${r.rosterMax}`;
+    $('scoutCount').textContent = r.total ? `${r.total.toLocaleString()}명 중 능력치 순 상위 ${r.results.length}명` : '조건에 맞는 선수가 없습니다.';
+    const list = $('scoutList');
+    list.innerHTML = '';
+    r.results.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'scout-row';
+      const years = p.first ? `${p.first}–${p.last}` : '';
+      const owner = p.owner ? ` · <b style="color:${p.owner === '나의 팀' ? 'var(--led)' : 'var(--dim)'}">${esc(p.owner)}</b>` : '';
+      row.innerHTML = `<div style="min-width:0"><div class="nm" style="font-weight:600">${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)}</span></div>` +
+        `<div class="sub" style="color:var(--dim);font-size:12px">OVR ${p.ovr}${p.potential > p.ovr ? ' / 잠재력 ' + p.potential : ''} · ${esc(p.team || '')} ${years}${owner}</div></div>`;
+      const b = document.createElement('button');
+      b.className = 'order sm';
+      if (p.owner) { b.textContent = p.owner === '나의 팀' ? '우리 팀' : '소속 있음'; b.disabled = true; }
+      else { b.textContent = `영입 (${p.cost}P)`; b.disabled = r.tp < p.cost || r.rosterSize >= r.rosterMax; b.onclick = () => doSign(p.id); }
+      row.append(b);
+      list.appendChild(row);
+    });
+  }
+  function doSign(id) {
+    touched = true;
+    try { const r = api('POST', '/api/scout/sign', { id }); toast(`${r.player.name} 영입! (${r.cost}P 사용)`); save(); manualLineup = null; }
+    catch (e) { toast(e.message); }
+    renderScout();
+  }
+  $('scoutQ').addEventListener('input', () => { clearTimeout(scoutTimer); scoutTimer = setTimeout(renderScout, 250); });
+  $('scoutLeague').onchange = renderScout;
+  $('scoutPos').onchange = renderScout;
 
   // ── 시작 ──
   go('home');

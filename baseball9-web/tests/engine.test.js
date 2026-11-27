@@ -149,7 +149,8 @@ test('시즌: 직접 지휘한 경기도 하루를 진행시키고 전적 반영
 
 test('훈련과 저장/불러오기', () => {
   const svc = createService(14);
-  const p = svc.state.teams[0].roster.find(x => x.ovr < x.potential);
+  const p = svc.state.teams[0].roster[0];
+  p.potential = p.ovr + 5;                 // 은퇴 선수는 잠재력=능력치라 테스트용으로 여유를 줌
   const before = p.ovr, tp = svc.state.tp;
   const r = svc.dispatch('POST', '/api/train', { id: p.id, kind: 'ovr' });
   assert.strictEqual(r.status, 200);
@@ -165,6 +166,62 @@ test('훈련과 저장/불러오기', () => {
   assert.strictEqual(JSON.stringify(svc2.dispatch('GET', '/api/stats').payload.leaders.hr), JSON.stringify(svc.dispatch('GET', '/api/stats').payload.leaders.hr));
   assert.strictEqual(svc2.dispatch('POST', '/api/game', {}).status, 200, '불러온 뒤 경기 진행 가능');
   assert.ok(JSON.stringify(saved).length < 200 * 1024, '저장 크기가 문서 한도 안');
+});
+
+test('실존 선수: 현역 리그는 2025 소속, 레전드 리그는 최다 소속 구단', () => {
+  const cur = createService(21);
+  cur.dispatch('POST', '/api/season/new', { mode: 'current' });
+  const kia = cur.state.teams.find(t => t.name === 'KIA타이거즈');
+  assert.strictEqual(kia.roster.length, 20);
+  assert.ok(kia.roster.every(p => p.league === 'KBO' && p.team === 'KIA타이거즈' && p.last >= 2025));
+  const leg = createService(22);
+  leg.dispatch('POST', '/api/season/new', { mode: 'legend' });
+  const legKia = leg.state.teams.find(t => t.name === 'KIA타이거즈');
+  assert.ok(legKia.roster.some(p => p.name === '선동열'), '레전드 KIA 에 선동열');
+  const ids = leg.state.teams.flatMap(t => t.roster.map(p => p.id));
+  assert.strictEqual(new Set(ids).size, ids.length, '한 선수가 두 팀에 없음');
+});
+
+test('우리 팀 강도는 상대 평균 기준으로 조절됨', () => {
+  const avgOf = r => r.reduce((a, p) => a + p.ovr, 0) / r.length;
+  const res = {};
+  for (const level of ['weak', 'mid', 'strong']) {
+    const svc = createService(31);
+    svc.dispatch('POST', '/api/season/new', { mode: 'current', level });
+    const ai = svc.state.teams.slice(1).map(t => avgOf(t.roster));
+    res[level] = avgOf(svc.state.teams[0].roster) - ai.reduce((a, b) => a + b, 0) / ai.length;
+    assert.ok(svc.state.teams[0].roster.filter(p => !p.isPitcher).length >= 9);
+    assert.ok(svc.state.teams[0].roster.filter(p => p.pos === 'SP').length >= 5);
+  }
+  assert.ok(res.weak < res.mid && res.mid < res.strong, JSON.stringify(res));
+  assert.ok(Math.abs(res.mid) < 4, '중위권은 평균 근처: ' + res.mid);
+});
+
+test('영입·방출', () => {
+  const svc = createService(41);
+  const found = svc.dispatch('POST', '/api/scout/search', { q: 'ichiro', league: 'MLB' }).payload;
+  assert.ok(found.results.some(r => r.name === 'Ichiro Suzuki'));
+  const kor = svc.dispatch('POST', '/api/scout/search', { q: '선동열' }).payload;
+  assert.strictEqual(kor.results[0].name, '선동열');
+  // 다른 구단 소속은 못 데려옴
+  const kiaPlayer = svc.state.teams[1].roster[0];
+  assert.strictEqual(svc.dispatch('POST', '/api/scout/sign', { id: kiaPlayer.id }).status, 409);
+  // 포인트가 있으면 자유 선수 영입
+  const target = svc.dispatch('POST', '/api/scout/search', { league: 'MLB', pos: 'SS' }).payload.results.find(r => !r.owner);
+  svc.state.tp = 100;
+  const before = svc.state.teams[0].roster.length;
+  const r = svc.dispatch('POST', '/api/scout/sign', { id: target.id });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(svc.state.teams[0].roster.length, before + 1);
+  assert.strictEqual(svc.state.tp, 100 - target.cost);
+  assert.strictEqual(svc.dispatch('POST', '/api/scout/sign', { id: target.id }).status, 409, '중복 영입 불가');
+  // 방출 후 저장/불러오기
+  assert.strictEqual(svc.dispatch('POST', '/api/release', { id: target.id }).status, 200);
+  assert.strictEqual(svc.state.teams[0].roster.length, before);
+  const svc2 = createService(1);
+  assert.ok(svc2.importState(JSON.parse(JSON.stringify(svc.exportState()))));
+  assert.strictEqual(svc2.state.teams[0].roster.length, before);
+  assert.strictEqual(svc2.state.mode, 'current');
 });
 
 test('밸런스: 팀당 득점이 현실 범위', () => {

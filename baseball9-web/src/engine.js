@@ -45,7 +45,8 @@ class Player {
   setHp(v) { this.hp = clamp(Math.trunc(v), 0, 100); }
   toDict() {
     return { id: this.id, name: this.name, pos: this.pos, ovr: this.ovr, effOvr: this.effOvr,
-      fatigue: this.fatigue, hp: this.hp, condition: this.condition[0], team: this.team, league: this.league };
+      fatigue: this.fatigue, hp: this.hp, condition: this.condition[0], team: this.team, league: this.league,
+      first: this.first || null, last: this.last || null };
   }
 }
 
@@ -668,7 +669,14 @@ class GameEngine {
 const ROSTER_POS = ['SP', 'SP', 'RP', 'RP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'DH', 'DH'];
 const OPP_POS = ['SP', 'RP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'DH'];
 
-const buildAllPlayers = () => PLAYERS.map(row => new Player(...row));
+// players.js 행: [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, KBO 최다 소속, 첫 시즌, 마지막 시즌, 전성기]
+function playerFromRow(r) {
+  const [id, name, pos, league, by, ovr, pot, last, most, first, lastY, peak] = r;
+  const p = new Player(name, pos, league, by ? peak - by : 28, ovr, pot, 0, 1, last, peak);
+  p.id = id; p.most = most; p.first = first; p.last = lastY;
+  return p;
+}
+const buildAllPlayers = () => PLAYERS.map(playerFromRow);
 const candidates = (pool, pos, used) => pool.filter(p => p.pos === pos && !used.has(p.id)).sort((a, b) => b.ovr - a.ovr);
 
 function fillRoster(result, used, pool, pitchers, count) {
@@ -733,5 +741,5 @@ const opponentNames = () => [...KBO_TEAMS, ...NPB_TEAMS, ...MLB_TEAMS];
 
 if (typeof module !== 'undefined') {
   module.exports = { GameEngine, GameState, TeamState, Player, MODE, makeRng, C, DIFFICULTY, PITCH_CALLS, POS_LABEL,
-    buildAllPlayers, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
+    buildAllPlayers, playerFromRow, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
 }

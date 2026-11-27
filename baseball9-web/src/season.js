@@ -1,11 +1,10 @@
 // 시즌 모드 (옛날 야구9단처럼): 10개 구단 리그, 일정, 순위, 선수 시즌 기록, 훈련, 저장/불러오기
 // dispatch(method, path, body) -> { status, payload }
 
-const SURNAMES = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권', '황', '안', '송', '류', '홍', '전', '고', '문', '양', '손'];
-const GIVEN = ['민준', '서준', '도윤', '예준', '시우', '하준', '지호', '주원', '지훈', '준서', '건우', '현우', '우진', '선우', '연우', '유준', '정우', '승우', '승현', '시윤',
-  '준혁', '은우', '지환', '승민', '지우', '유찬', '민성', '준영', '시후', '진우', '지성', '민재', '현준', '태윤', '재윤', '한결', '동현', '성민', '재원', '태민'];
-// 구단 구성: 선발 5명(로테이션) + 불펜 4명 + 야수 11명
-const TEAM_POS = ['SP', 'SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'DH', 'C', 'OF'];
+// 구단 로스터 구성: 선발 5 + 불펜 4 + 포수 2 + 내야 4 + 외야 4 + 지명 1 = 20명
+const TEAM_POS = ['SP', 'SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'C', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'OF', 'DH'];
+const ROSTER_MAX = 28;
+const CURRENT_YEAR = 2025;      // 데이터 마지막 시즌
 const MY_TEAM = '나의 팀';
 
 function createService(seed) {
@@ -14,55 +13,64 @@ function createService(seed) {
   const games = new Map();      // 진행 중인 경기
   let dirty = false;            // 저장이 필요한 변경이 있는지
 
-  // ── 선수 생성 ──
-  function genName(used) {
-    for (let i = 0; i < 200; i++) {
-      const n = SURNAMES[rng.randrange(SURNAMES.length)] + GIVEN[rng.randrange(GIVEN.length)];
-      if (!used.has(n)) { used.add(n); return n; }
-    }
-    return '선수' + used.size;
-  }
-  function genPlayer(pos, base, team, used) {
-    const ovr = clamp(base + rng.randrange(13) - 6, 50, 92);
-    const pot = clamp(ovr + rng.randrange(12), ovr, 97);
-    return new Player(genName(used), pos, '국내', 20 + rng.randrange(14), ovr, pot, 1 + rng.randrange(8), 1 + rng.randrange(3), team, 2026);
+  // ── 선수 DB ──
+  const DB = buildAllPlayers();                 // KBO·NPB·MLB 실존 선수 전체
+  const DB_BY_ID = new Map(DB.map(p => [p.id, p]));
+
+  // 후보(OVR 내림차순)에서 포지션 틀에 맞춰 로스터를 채움. 모자라면 비슷한 역할로 보충
+  function pickRoster(cands, used) {
+    const sorted = [...cands].sort((a, b) => b.ovr - a.ovr);
+    const roster = [];
+    const take = p => { used.add(p.id); roster.push(p); };
+    TEAM_POS.forEach(pos => {
+      let p = sorted.find(x => !used.has(x.id) && x.pos === pos);
+      if (!p && (pos === 'SP' || pos === 'RP')) p = sorted.find(x => !used.has(x.id) && x.isPitcher);
+      if (!p && pos === 'OF') p = sorted.find(x => !used.has(x.id) && !x.isPitcher);
+      if (!p && pos !== 'SP' && pos !== 'RP') p = sorted.find(x => !used.has(x.id) && !x.isPitcher);
+      if (p) take(p);
+    });
+    return roster;
   }
 
   // ── 시즌 생성 ──
-  function newSeason({ length = 36, minOvr = 75, maxOvr = 85, difficulty = 'NORMAL', keep = false } = {}) {
+  // mode: 'current' = 2025 실제 소속 / 'legend' = 역대 최다 소속 구단
+  // level: 'weak' | 'mid' | 'strong' — 상대 구단 평균 전력을 기준으로 우리 팀 강도를 정함
+  function newSeason({ length = 36, level = 'mid', difficulty = 'NORMAL', keep = false, mode = 'current' } = {}) {
     let teams;
     if (keep && S) {
       teams = S.teams;                       // 다음 시즌: 선수·능력치 유지, 기록 초기화
       teams.forEach(t => { t.w = 0; t.l = 0; t.rs = 0; t.ra = 0; t.streak = ''; });
-      Object.values(S.players).forEach(p => { p.age++; p.setFatigue(0); });
+      teams.forEach(t => t.roster.forEach(p => { p.age++; p.setFatigue(0); }));
+      mode = S.mode || mode;
     } else {
-      const all = buildAllPlayers();
-      const used = new Set(all.map(p => p.name));
-      const mineRoster = buildAutoRoster(all, minOvr, maxOvr, rng);
-      const mineIds = new Set(mineRoster.map(p => p.id));
-      const pool = all.filter(p => !mineIds.has(p.id));
-      // 남은 DB 스타 선수를 상대 구단에 나눠 배치
-      for (let i = pool.length - 1; i > 0; i--) { const j = rng.randrange(i + 1); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+      DB.forEach(p => { p.setFatigue(0); });
+      const used = new Set();
       const aiNames = KBO_TEAMS.slice(0, 9);
-      teams = [{ id: 0, name: MY_TEAM, user: true, roster: mineRoster }];
-      aiNames.forEach((name, i) => {
-        const base = 68 + rng.randrange(13);                  // 구단별 전력 차이
-        const roster = [];
-        TEAM_POS.forEach(pos => {
-          const idx = pool.findIndex(p => p.pos === pos);
-          if (idx >= 0 && rng.random() < 0.45) roster.push(pool.splice(idx, 1)[0]);
-          else roster.push(genPlayer(pos, base, name, used));
-        });
-        teams.push({ id: i + 1, name, user: false, roster });
+      const ai = aiNames.map((name, i) => {
+        const cands = DB.filter(p => p.league === 'KBO' &&
+          (mode === 'legend' ? p.most === name : (p.team === name && p.last >= CURRENT_YEAR)));
+        return { id: i + 1, name, user: false, roster: pickRoster(cands, used) };
       });
-      // 우리 팀도 5인 로테이션과 벤치를 갖추도록 보강
-      ['SP', 'SP', 'SP', 'RP', 'OF', 'C'].forEach(pos => mineRoster.push(genPlayer(pos, Math.round((minOvr + maxOvr) / 2) - 4, MY_TEAM, used)));
+      // 우리 팀: 나머지 선수(3개 리그 전체) 중, 상대 구단 평균 대비 강도 범위에서 무작위 구성
+      const aiAvg = ai.reduce((a, t) => a + t.roster.reduce((x, p) => x + p.ovr, 0) / t.roster.length, 0) / ai.length;
+      const [lo, hi] = { weak: [-9, -2], mid: [-3, 4], strong: [4, 11] }[level] || [-3, 4];
+      const free = DB.filter(p => !used.has(p.id));
+      const mine = [];
+      [...TEAM_POS, 'SP', 'RP', 'OF', 'C'].forEach(pos => {
+        const fits = x => !used.has(x.id) && x.ovr >= aiAvg + lo && x.ovr <= aiAvg + hi;
+        let c = free.filter(x => fits(x) && x.pos === pos);
+        if (!c.length) c = free.filter(x => fits(x) && x.isPitcher === (pos === 'SP' || pos === 'RP'));
+        if (!c.length) return;
+        const p = c[rng.randrange(c.length)];
+        used.add(p.id); mine.push(p);
+      });
+      teams = [{ id: 0, name: MY_TEAM, user: true, roster: mine }, ...ai];
       teams.forEach(t => { t.w = 0; t.l = 0; t.rs = 0; t.ra = 0; t.streak = ''; });
     }
     const players = {};
     teams.forEach(t => t.roster.forEach(p => { players[p.id] = p; }));
     S = {
-      version: 1, year: keep && S ? S.year + 1 : 2026, length, difficulty, day: 0,
+      version: 2, mode, year: keep && S ? S.year + 1 : 2026, length, difficulty, day: 0,
       teams, players, schedule: makeSchedule(teams.length, length),
       stats: {}, tp: keep && S ? S.tp : 10, recent: [], news: [], done: false, champion: null,
     };
@@ -236,7 +244,7 @@ function createService(seed) {
   function seasonView() {
     const oppId = todayMatch();
     return {
-      year: S.year, day: S.day, length: S.length, done: S.done, champion: S.champion, tp: S.tp, difficulty: S.difficulty,
+      year: S.year, mode: S.mode, day: S.day, length: S.length, done: S.done, champion: S.champion, tp: S.tp, difficulty: S.difficulty,
       today: oppId === null ? null : { opponent: team(oppId).name, oppStrength: teamStrength(team(oppId)) },
       myStrength: teamStrength(myTeam()),
       standings: standings(), recent: S.recent.slice(-5).reverse(), news: S.news,
@@ -387,23 +395,80 @@ function createService(seed) {
     return [200, { player: { ...p.toDict(), potential: p.potential }, tp: S.tp }];
   }
 
+  // ── 영입 / 방출 ──
+  const signCost = p => Math.max(2, Math.round((p.ovr - 60) * 0.8));
+  function ownerOf(id) {
+    const t = S.teams.find(x => x.roster.some(p => p.id === id));
+    return t ? t.name : null;
+  }
+  function scoutSearch(body) {
+    const q = String(body.q || '').trim().toLowerCase();
+    const league = body.league || '';
+    const pos = body.pos || '';
+    const res = [];
+    for (const base of DB) {
+      const p = S.players[base.id] || base;      // 팀에 있는 선수는 현재(훈련 반영) 상태로
+      if (league && p.league !== league) continue;
+      if (pos === 'P' ? !p.isPitcher : pos === 'H' ? p.isPitcher : pos && p.pos !== pos) continue;
+      if (q && !p.name.toLowerCase().includes(q)) continue;
+      res.push(p);
+    }
+    res.sort((a, b) => b.ovr - a.ovr || a.name.localeCompare(b.name));
+    const total = res.length;
+    return [200, {
+      total, tp: S.tp, rosterSize: myTeam().roster.length, rosterMax: ROSTER_MAX,
+      results: res.slice(0, Math.min(60, Number(body.limit) || 40)).map(p => ({
+        id: p.id, name: p.name, pos: p.pos, league: p.league, ovr: p.ovr, potential: p.potential,
+        team: p.team, first: p.first, last: p.last, owner: ownerOf(p.id), cost: signCost(p),
+      })),
+    }];
+  }
+  function sign(body) {
+    const base = DB_BY_ID.get(body.id);
+    if (!base) return [404, { error: '선수를 찾을 수 없습니다.' }];
+    const owner = ownerOf(base.id);
+    if (owner === MY_TEAM) return [409, { error: `${base.name} 선수는 이미 우리 팀입니다.` }];
+    if (owner) return [409, { error: `${base.name} 선수는 ${owner} 소속이라 데려올 수 없습니다.` }];
+    const cost = signCost(base);
+    if (S.tp < cost) return [409, { error: `훈련 포인트가 부족합니다 (${cost} 필요, 보유 ${S.tp}).` }];
+    if (myTeam().roster.length >= ROSTER_MAX) return [409, { error: `로스터가 가득 찼습니다 (${ROSTER_MAX}명). 훈련 탭에서 선수를 방출하세요.` }];
+    S.tp -= cost;
+    base.setFatigue(0);
+    myTeam().roster.push(base);
+    S.players[base.id] = base;
+    dirty = true;
+    return [200, { player: base.toDict(), tp: S.tp, cost }];
+  }
+  function release(body) {
+    const m = myTeam();
+    const p = m.roster.find(x => x.id === body.id);
+    if (!p) return [404, { error: '우리 팀 선수가 아닙니다.' }];
+    const rest = m.roster.filter(x => x !== p);
+    if (rest.filter(x => !x.isPitcher).length < 9) return [409, { error: '야수가 9명보다 적어지면 경기를 할 수 없습니다.' }];
+    if (rest.filter(x => x.isPitcher).length < 5) return [409, { error: '투수가 5명보다 적어지면 선발 로테이션이 돌지 않습니다.' }];
+    m.roster = rest;
+    delete S.players[p.id];       // 기록(stats)은 남겨 둠
+    dirty = true;
+    return [200, { released: p.name }];
+  }
+
   // ── 저장 / 불러오기 ──
   function exportState() {
-    const pl = Object.values(S.players).map(p => [p.id, p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era, p.fatigue]);
+    const pl = Object.values(S.players).map(p => [p.id, p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era, p.fatigue, p.first || 0, p.last || 0, p.most || '']);
     const teams = S.teams.map(t => ({ id: t.id, name: t.name, user: t.user, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak, roster: t.roster.map(p => p.id) }));
-    return { version: 1, year: S.year, length: S.length, difficulty: S.difficulty, day: S.day, tp: S.tp, done: S.done, champion: S.champion,
+    return { version: 2, mode: S.mode, year: S.year, length: S.length, difficulty: S.difficulty, day: S.day, tp: S.tp, done: S.done, champion: S.champion,
       recent: S.recent, news: S.news, schedule: S.schedule, stats: S.stats, players: pl, teams };
   }
   function importState(o) {
-    if (!o || o.version !== 1) return false;
+    if (!o || (o.version !== 1 && o.version !== 2)) return false;
     const players = {};
-    o.players.forEach(([id, name, pos, league, age, ovr, pot, sal, con, tm, era, fat]) => {
+    o.players.forEach(([id, name, pos, league, age, ovr, pot, sal, con, tm, era, fat, first, last, most]) => {
       const p = new Player(name, pos, league, age, ovr, pot, sal, con, tm, era);
-      p.id = id; p.fatigue = fat;
+      p.id = id; p.fatigue = fat; p.first = first || 0; p.last = last || 0; p.most = most || '';
       players[id] = p;
     });
     const teams = o.teams.map(t => ({ ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
-    S = { version: 1, year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
+    S = { version: 2, mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
       recent: o.recent || [], news: o.news || [], schedule: o.schedule, stats: o.stats || {}, players, teams };
     games.clear();
     dirty = false;
@@ -416,12 +481,16 @@ function createService(seed) {
     let res;
     if (key === 'GET api/season') res = [200, seasonView()];
     else if (key === 'POST api/season/new') {
-      newSeason({ length: Number(body.length || 36), minOvr: Number(body.minOvr ?? 75), maxOvr: Number(body.maxOvr ?? 85),
-        difficulty: DIFFICULTY[body.difficulty] ? body.difficulty : 'NORMAL', keep: !!body.keep });
+      newSeason({ length: Number(body.length || 36), level: ['weak', 'mid', 'strong'].includes(body.level) ? body.level : 'mid',
+        difficulty: DIFFICULTY[body.difficulty] ? body.difficulty : 'NORMAL', keep: !!body.keep,
+        mode: body.mode === 'legend' ? 'legend' : 'current' });
       res = [200, seasonView()];
     } else if (key === 'POST api/season/quick') res = quick(clamp(Number(body.days || 1), 1, 200));
     else if (key === 'GET api/stats') res = [200, statsView()];
     else if (key === 'POST api/train') res = train(body);
+    else if (key === 'POST api/scout/search') res = scoutSearch(body);
+    else if (key === 'POST api/scout/sign') res = sign(body);
+    else if (key === 'POST api/release') res = release(body);
     else if (key === 'GET api/league') res = [200, leagueView()];
     else if (key === 'POST api/game') res = newGame(body);
     else if (parts[1] === 'game' && parts.length === 4 && method === 'POST' && parts[3] === 'advance') res = advance(parts[2], body);
