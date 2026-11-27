@@ -114,7 +114,7 @@ function createService(seed) {
     const players = {};
     teams.forEach(t => t.roster.forEach(p => { players[p.id] = p; }));
     S = {
-      version: 5, started, league, mode, year: keep && S ? S.year + 1 : 2026, length, difficulty, day: 0,
+      version: 5, started, league, mode, year: keep && S ? S.year + 1 : LEAGUES.KBO.last + 1, length, difficulty, day: 0,
       teams, players, schedule: makeSchedule(teams.length, length),
       stats: {}, tp: keep && S ? S.tp : 10, recent: [], news: [], done: false, champion: null,
       allStar: { day: length >= 18 ? Math.floor(length / 2) : -1, done: false, result: null },
