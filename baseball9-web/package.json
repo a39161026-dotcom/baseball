@@ -1,0 +1,9 @@
+{
+  "name": "baseball9-web",
+  "private": true,
+  "description": "야구9단 매니저 — 휴대폰/PC 브라우저용 단일 HTML 버전",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test tests/engine.test.js"
+  }
+}
