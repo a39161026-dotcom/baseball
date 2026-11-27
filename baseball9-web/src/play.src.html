@@ -241,9 +241,7 @@
         <select id="pickMode">
           <option value="current" selected>현역 (최근 시즌 실제 소속)</option>
           <option value="legend">역대 레전드 (구단 역대 선수)</option>
-          <option value="year">연도 선택 (1982~2026 그 해 실제 로스터)</option>
         </select>
-        <select id="pickYear" hidden aria-label="시즌 연도"></select>
       </div>
       <div class="row" style="margin-top:8px">
         <label class="lbl" for="pickLen">경기 수</label>
@@ -695,10 +693,7 @@
     renderPick();
   }
   function renderPick() {
-    const yr = $('pickMode').value === 'year';
-    $('pickYear').hidden = !yr;
-    if (!$('pickYear').options.length) for (let y = 2026; y >= 1982; y--) $('pickYear').add(new Option(`${y}년`, y));
-    const r = api('POST', '/api/teams', { league: $('pickLeague').value, mode: $('pickMode').value, year: Number($('pickYear').value) || 2026 });
+    const r = api('POST', '/api/teams', { league: $('pickLeague').value, mode: $('pickMode').value });
     const maxS = Math.max(...r.teams.map(t => t.strength)), minS = Math.min(...r.teams.map(t => t.strength));
     const box = $('pickTeams');
     box.innerHTML = '';
@@ -724,7 +719,7 @@
   function startWithTeam(name) {
     touched = true;
     try {
-      api('POST', '/api/season/new', { league: $('pickLeague').value, mode: $('pickMode').value, year: Number($('pickYear').value) || 2026, team: name,
+      api('POST', '/api/season/new', { league: $('pickLeague').value, mode: $('pickMode').value, team: name,
         length: Number($('pickLen').value), difficulty: $('pickDiff').value });
       state = null; gameId = null; manualLineup = null; stopAuto();
       document.querySelector('nav.tabs').hidden = false;
@@ -734,7 +729,6 @@
   $('pickLeague').onchange = renderPick;
   $('pickSub').onchange = renderPick;
   $('pickMode').onchange = renderPick;
-  $('pickYear').onchange = renderPick;
   $('pickCancel').onclick = () => { document.querySelector('nav.tabs').hidden = false; go('home'); };
   let confirmTimer = null;
   $('btnRepick').onclick = () => {
@@ -1316,7 +1310,7 @@
   function renderDraft() {
     const d = api('GET', '/api/draft');
     if (!d.open) {
-      $('draftInfo').textContent = '시즌이 끝나면 드래프트가 열립니다. 꼴찌 팀부터 2라운드씩 지명합니다. KBO·NPB·MLB 실존 유망주 중 어느 구단에도 속하지 않은 선수만 나오고, 한 번 지명되면 다른 팀은 데려갈 수 없습니다.';
+      $('draftInfo').textContent = '시즌이 끝나면 드래프트가 열립니다. 꼴찌 팀부터 2라운드씩 지명합니다. KBO·NPB·MLB 역대 모든 시대의 실존 선수 중 어느 구단에도 없는 선수가 무작위로 나옵니다. 한 번 지명되면 다른 팀은 데려갈 수 없습니다.';
       $('draftPool').innerHTML = ''; $('draftPicks').innerHTML = '';
       return;
     }
@@ -1328,7 +1322,7 @@
     const flt = $('draftFilter');
     flt.innerHTML = d.done ? '' : ['', 'KBO', 'NPB', 'MLB'].map(k => `<button class="order sm${draftLg === k ? ' on' : ''}" data-k="${k}">${k || '전체'}</button>`).join('');
     flt.querySelectorAll('button').forEach(b => { b.onclick = () => { draftLg = b.dataset.k; renderDraft(); }; });
-    if (!d.done) d.pool.filter(p => !draftLg || p.league === draftLg).slice(0, 25).forEach(p => {
+    if (!d.done) d.pool.filter(p => !draftLg || p.league === draftLg).slice(0, 40).forEach(p => {
       const row = document.createElement('div');
       row.className = 'scout-row';
       row.innerHTML = `<div style="min-width:0"><div style="font-weight:600">${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)} · ${p.age}세${p.from ? ' · ' + esc(p.from) : ''}</span></div>` +

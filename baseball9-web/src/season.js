@@ -860,23 +860,26 @@ function createService(seed) {
   }
 
   // ── 드래프트 (시즌 종료 후) ──
-  // 풀: KBO·NPB·MLB 실존 선수 중 어느 구단에도 속하지 않은 젊은 선수 (우리 팀·AI 팀 로스터와 겹치지 않음)
-  const DRAFT_CAP = { KBO: 80, NPB: 100, MLB: 160 };
+  // 풀: KBO·NPB·MLB 역대 모든 시대 실존 선수 중 어느 구단에도 속하지 않은 선수를 무작위로 뽑음 (우리 팀·AI 팀 로스터와 겹치지 않음)
+  // 능력치 구간별로 섞어서 스타·준척·유망주가 골고루 나오게 함
+  const DRAFT_BANDS = [[85, 99, 14], [70, 84, 30], [58, 69, 56]];      // [최소 OVR, 최대 OVR, 리그당 인원]
   function draftCandidates() {
     const owned = new Set();
     S.teams.forEach(t => t.roster.forEach(p => owned.add(pk(p))));
-    const val = p => p.potential * 0.7 + p.ovr * 0.3;
     const seen = new Set(), rows = [];
+    const shuffled = [...DB].map(p => [rng.random(), p]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
     ['KBO', 'NPB', 'MLB'].forEach(lg => {
-      const list = DB.filter(p => p.league === lg && p.birthYear && !owned.has(pk(p)) && p.last >= S.year - 2 && S.year - p.birthYear <= 27)
-        .sort((a, b) => val(b) - val(a));
-      let n = 0;
-      for (const p of list) {
-        if (n >= DRAFT_CAP[lg]) break;
-        if (seen.has(pk(p))) continue;             // 리그를 오간 같은 사람은 한 번만
-        seen.add(pk(p)); n++;
-        rows.push([p.id, p.name, p.pos, lg, S.year - p.birthYear, p.ovr, p.potential, p.team || '']);
-      }
+      const pool = shuffled.filter(p => p.league === lg && !owned.has(pk(p)));
+      DRAFT_BANDS.forEach(([lo, hi, n]) => {
+        let k = 0;
+        for (const p of pool) {
+          if (k >= n) break;
+          if (p.ovr < lo || p.ovr > hi || seen.has(pk(p))) continue;      // 리그를 오간 같은 사람은 한 번만
+          seen.add(pk(p)); k++;
+          const active = p.last >= LEAGUES[lg].last - 1 && p.birthYear;
+          rows.push([p.id, p.name, p.pos, lg, active ? S.year - p.birthYear : p.age, p.ovr, p.potential, `${p.first}~${p.last} ${p.team || ''}`.trim()]);
+        }
+      });
     });
     return rows;
   }

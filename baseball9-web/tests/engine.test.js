@@ -337,6 +337,9 @@ test('드래프트와 성장: 시즌 종료 → 드래프트 → 다음 시즌 �
   assert.ok(leagues.has('KBO') && leagues.has('NPB') && leagues.has('MLB'), 'KBO·NPB·MLB 에서 고를 수 있음');
   const seen = new Set();
   svc.state.teams.forEach(t => t.roster.forEach(p => { assert.ok(!seen.has(p.person || p.id), '전 구단 로스터 중복 없음'); seen.add(p.person || p.id); }));
+  const pool = svc.dispatch('GET', '/api/draft').payload.pool;
+  assert.ok(pool.length >= 150, '풀이 충분히 큼');
+  assert.ok(pool.some(x => parseInt(x.from, 10) < 1995) && pool.some(x => parseInt(x.from.split('~')[1], 10) >= 2020), '여러 시대 선수가 섞임');
   d = r.payload.draft;
   assert.ok(d.picks.length > 1);
   const ages = new Map(me.roster.map(p => [p.id, p.age]));
