@@ -241,7 +241,9 @@
         <select id="pickMode">
           <option value="current" selected>현역 (최근 시즌 실제 소속)</option>
           <option value="legend">역대 레전드 (구단 역대 선수)</option>
+          <option value="year">연도 선택 (1982~2026 그 해 실제 로스터)</option>
         </select>
+        <select id="pickYear" hidden aria-label="시즌 연도"></select>
       </div>
       <div class="row" style="margin-top:8px">
         <label class="lbl" for="pickLen">경기 수</label>
@@ -640,7 +642,8 @@
       $('dayTitle').textContent = `📅 ${s.day + 1}일차 / ${s.length}경기`;
       $('myName').textContent = s.myName;
       $('oppName').textContent = s.today.opponent;
-      $('oppStr').textContent = `팀 전력 ${s.today.oppStrength}`;
+      $('oppStr').textContent = s.today.bye ? '오늘은 쉬는 날' : `팀 전력 ${s.today.oppStrength}`;
+      $('goPlay').disabled = !!s.today.bye;
       $('myStr').textContent = `팀 전력 ${s.myStrength}`;
     }
     $('recentList').innerHTML = s.recent.length
@@ -692,7 +695,10 @@
     renderPick();
   }
   function renderPick() {
-    const r = api('POST', '/api/teams', { league: $('pickLeague').value, mode: $('pickMode').value });
+    const yr = $('pickMode').value === 'year';
+    $('pickYear').hidden = !yr;
+    if (!$('pickYear').options.length) for (let y = 2026; y >= 1982; y--) $('pickYear').add(new Option(`${y}년`, y));
+    const r = api('POST', '/api/teams', { league: $('pickLeague').value, mode: $('pickMode').value, year: Number($('pickYear').value) || 2026 });
     const maxS = Math.max(...r.teams.map(t => t.strength)), minS = Math.min(...r.teams.map(t => t.strength));
     const box = $('pickTeams');
     box.innerHTML = '';
@@ -718,7 +724,7 @@
   function startWithTeam(name) {
     touched = true;
     try {
-      api('POST', '/api/season/new', { league: $('pickLeague').value, mode: $('pickMode').value, team: name,
+      api('POST', '/api/season/new', { league: $('pickLeague').value, mode: $('pickMode').value, year: Number($('pickYear').value) || 2026, team: name,
         length: Number($('pickLen').value), difficulty: $('pickDiff').value });
       state = null; gameId = null; manualLineup = null; stopAuto();
       document.querySelector('nav.tabs').hidden = false;
@@ -728,6 +734,7 @@
   $('pickLeague').onchange = renderPick;
   $('pickSub').onchange = renderPick;
   $('pickMode').onchange = renderPick;
+  $('pickYear').onchange = renderPick;
   $('pickCancel').onclick = () => { document.querySelector('nav.tabs').hidden = false; go('home'); };
   let confirmTimer = null;
   $('btnRepick').onclick = () => {

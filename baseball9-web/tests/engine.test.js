@@ -453,3 +453,31 @@ test('통합 리그: KBO·NPB·MLB 52팀이 한 리그에서 겨룸', () => {
   svc.state.teams.forEach(tm => tm.roster.forEach(p => { assert.ok(!seen.has(p.person || p.id)); seen.add(p.person || p.id); }));
   assert.ok(svc.dispatch('GET', '/api/draft').payload.open);
 });
+
+test('연도 선택: 1982~2026 그 해 실제 로스터, 홀수 구단 연도는 휴식일 처리', () => {
+  const svc = createService(91);
+  const prev = (league, year) => svc.dispatch('POST', '/api/teams', { league, mode: 'year', year }).payload.teams;
+  const k85 = prev('KBO', 1985);
+  assert.strictEqual(k85.length, 6, '1985 KBO 는 6개 구단');
+  assert.ok(k85.some(t => t.name === 'KIA타이거즈' && t.stars.some(s => s.name === '선동열')), '1985 해태(KIA 계보)에 선동열');
+  assert.ok(prev('KBO', 1998).length >= 8);
+  assert.strictEqual(prev('MLB', 1982).length, 26, '1982 MLB 26개 구단');
+  assert.ok(prev('MLB', 1998).some(t => t.stars.concat(t.bats).some(s => s.name === 'Mark McGwire')));
+  assert.ok(prev('NPB', 1990).length === 12);
+  // 1987 KBO: 7개 구단(홀수) → 쉬는 날이 생겨도 시즌이 끝까지 진행
+  assert.strictEqual(prev('KBO', 1987).length, 7);
+  assert.strictEqual(svc.dispatch('POST', '/api/season/new', { league: 'KBO', mode: 'year', year: 1987, team: prev('KBO', 1987)[0].name, length: 14 }).status, 200);
+  let s = svc.dispatch('GET', '/api/season').payload;
+  assert.strictEqual(s.year, 1987);
+  assert.strictEqual(s.standings.length, 7);
+  svc.dispatch('POST', '/api/season/quick', { days: 14 });
+  s = svc.dispatch('GET', '/api/season').payload;
+  assert.ok(s.done, '휴식일 포함 시즌 종료');
+  assert.ok(svc.state.teams[0].roster.every(p => p.age >= 18 && p.age < 50), '그 해 기준 나이');
+  // 통합 리그도 연도 선택 가능
+  assert.ok(prev('ALL', 2005).length >= 50);
+  // 저장/불러오기
+  const svc2 = createService(1);
+  assert.ok(svc2.importState(JSON.parse(JSON.stringify(svc.exportState()))));
+  assert.strictEqual(svc2.dispatch('GET', '/api/season').payload.year, 1987);
+});

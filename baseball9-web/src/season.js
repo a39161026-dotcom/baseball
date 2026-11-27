@@ -42,8 +42,39 @@ function createService(seed) {
 
   // 리그의 모든 구단 정의 (후보 선수 포함)
   // mode: 'current' = 마지막 시즌 소속 / 'legend' = 역대 최다 소속 구단(전신 포함)
-  function leagueDefs(league, mode) {
-    const fromLeague = lg => LEAGUES[lg].teams.map(t => {
+  // 시즌 선택 모드: SEASONS(선수별 [연도, 팀, 그 해 능력치])로 그 해의 실제 구단 로스터를 만듦
+  let YEAR_IDX = null;
+  function yearIndex() {
+    if (YEAR_IDX) return YEAR_IDX;
+    const idx = new Map();                      // 연도 → 리그 → 팀 이름 → [[선수 id, 그 해 능력치]]
+    for (const id in SEASONS) {
+      const base = DB_BY_ID.get(id);
+      if (!base) continue;
+      for (const [y, t, o] of SEASONS[id]) {
+        let L = idx.get(y); if (!L) idx.set(y, L = {});
+        const lg = L[base.league] || (L[base.league] = {}), nm = SEASON_TEAMS[t];
+        (lg[nm] || (lg[nm] = [])).push([id, o]);
+      }
+    }
+    return YEAR_IDX = idx;
+  }
+  function yearPlayer(id, ovr, year, teamName) {
+    const base = DB_BY_ID.get(id), p = clonePlayer(base);
+    const age = base.birthYear ? year - base.birthYear : 28;
+    Object.assign(p, { ovr, age, team: teamName, potential: age <= 25 ? Math.min(97, ovr + 2 * (26 - age)) : ovr });
+    return p;
+  }
+  function yearTeams(lg, year) {
+    const L = (yearIndex().get(year) || {})[lg] || {};
+    return Object.keys(L).filter(n => L[n].length >= 12).sort().map((name, i) => {
+      const known = LEAGUES[lg].teams.find(t => t.name === name);
+      return { name, group: known ? known.group : LEAGUES[lg].groups[i % 2], league: lg, cands: L[name].map(([id, o]) => yearPlayer(id, o, year, name)) };
+    });
+  }
+  const validYear = y => Math.max(1982, Math.min(LEAGUES.KBO.last, Math.round(Number(y)) || LEAGUES.KBO.last));
+
+  function leagueDefs(league, mode, year) {
+    const fromLeague = lg => mode === 'year' ? yearTeams(lg, validYear(year)) : LEAGUES[lg].teams.map(t => {
       const cands = DB.filter(p => p.league === lg &&
         (mode === 'legend' ? p.most === t.name : (p.team === t.name && p.last >= LEAGUES[lg].last)));
       return { name: t.name, group: t.group, league: lg, cands };
@@ -59,8 +90,8 @@ function createService(seed) {
   }
 
   // 팀 선택 화면용 요약: 전력(상위 20명 평균), 스타 선수, 주전 라인업
-  function teamPreview(league, mode) {
-    return leagueDefs(league, mode).map(d => {
+  function teamPreview(league, mode, year) {
+    return leagueDefs(league, mode, year).map(d => {
       const roster = pickRoster(d.cands, new Set());
       const byOvr = [...roster].sort((a, b) => b.ovr - a.ovr);
       const pit = byOvr.filter(p => p.isPitcher), bat = byOvr.filter(p => !p.isPitcher);
@@ -71,8 +102,8 @@ function createService(seed) {
   }
 
   // 선택한 팀을 첫 번째(우리 팀)로, 나머지를 AI 구단으로 구성. 우리 팀부터 뽑아 선수가 겹치지 않게 함
-  function buildLeagueTeams(league, mode, myName) {
-    const defs = leagueDefs(league, mode);
+  function buildLeagueTeams(league, mode, myName, year) {
+    const defs = leagueDefs(league, mode, year);
     let mine = defs.find(d => d.name === myName) || defs[0];
     const used = new Set();
     const ordered = [mine, ...defs.filter(d => d !== mine)];
@@ -82,7 +113,7 @@ function createService(seed) {
   // ── 시즌 생성 ──
   // league: KBO | NPB | MLB | WORLD,  team: 우리가 맡을 팀 이름
   // keep: 다음 시즌 (선수·능력치 유지, 나이·성장 반영)
-  function newSeason({ length = 36, difficulty = 'NORMAL', keep = false, mode = 'current', league = 'KBO', team = null, started = true } = {}) {
+  function newSeason({ length = 36, difficulty = 'NORMAL', keep = false, mode = 'current', league = 'KBO', team = null, started = true, year = null } = {}) {
     let teams;
     let devReport = null, carry = null;
     if (keep && S) {
@@ -99,13 +130,13 @@ function createService(seed) {
       const fresh = buildAllPlayers();
       DB.length = 0; DB.push(...fresh);
       DB_BY_ID.clear(); fresh.forEach(p => DB_BY_ID.set(p.id, p));
-      teams = buildLeagueTeams(league, mode, team);
+      teams = buildLeagueTeams(league, mode, team, year);
       teams.forEach(t => { t.w = 0; t.l = 0; t.rs = 0; t.ra = 0; t.streak = ''; });
     }
     const players = {};
     teams.forEach(t => t.roster.forEach(p => { players[p.id] = p; }));
     S = {
-      version: 5, started, league, mode, year: keep && S ? S.year + 1 : LEAGUES.KBO.last + 1, length, difficulty, day: 0,
+      version: 5, started, league, mode, year: keep && S ? S.year + 1 : mode === 'year' ? validYear(year) : LEAGUES.KBO.last + 1, length, difficulty, day: 0,
       teams, players, schedule: makeSchedule(teams.length, length),
       stats: {}, tp: keep && S ? S.tp : 10, recent: [], news: [], done: false, champion: null,
       allStar: { day: length >= 18 ? Math.floor(length / 2) : -1, done: false, result: null },
@@ -123,7 +154,8 @@ function createService(seed) {
   }
 
   // 원형 리그 방식: 하루 5경기, 모든 팀이 매일 1경기
-  function makeSchedule(n, length) {
+  function makeSchedule(teamCount, length) {
+    const n = teamCount + (teamCount % 2);             // 구단 수가 홀수면 가상의 상대(번호 teamCount)를 넣어 쉬는 날을 만듦
     const ids = [...Array(n).keys()], days = [];
     for (let d = 0; d < length; d++) {
       const round = d % (n - 1);
@@ -145,6 +177,8 @@ function createService(seed) {
     const m = S.schedule[S.day].find(([a, b]) => a === 0 || b === 0);
     return m[0] === 0 ? m[1] : m[0];
   }
+  const isGhost = id => id >= S.teams.length;
+  const isBye = () => !S.done && isGhost(todayMatch());      // 우리 팀 휴식일 (구단 수가 홀수인 연도)
 
   // ── 라인업/선발 ──
   const hitters = t => t.roster.filter(p => !p.isPitcher);
@@ -213,17 +247,19 @@ function createService(seed) {
 
   // 사용자 경기가 끝나면 그날 나머지 경기를 모두 진행하고 다음 날로
   function finishDay(userEngine) {
-    const opp = team(todayMatch());
-    const mine = myTeam(), gs = userEngine.gs;
-    recordGame(userEngine, mine, opp);
-    afterMyGame(userEngine);
-    const win = gs.mine.score > gs.theirs.score;
-    S.recent.push({ day: S.day + 1, opponent: opp.name, result: win ? '승' : '패', score: `${gs.mine.score}:${gs.theirs.score}` });
-    S.recent = S.recent.slice(-10);
-    S.tp += win ? 3 : 2;                       // 훈련 포인트
+    if (userEngine) {
+      const opp = team(todayMatch());
+      const mine = myTeam(), gs = userEngine.gs;
+      recordGame(userEngine, mine, opp);
+      afterMyGame(userEngine);
+      const win = gs.mine.score > gs.theirs.score;
+      S.recent.push({ day: S.day + 1, opponent: opp.name, result: win ? '승' : '패', score: `${gs.mine.score}:${gs.theirs.score}` });
+      S.recent = S.recent.slice(-10);
+      S.tp += win ? 3 : 2;                       // 훈련 포인트
+    } else S.tp += 1;                            // 휴식일
     const news = [];
     S.schedule[S.day].forEach(([a, b]) => {
-      if (a === 0 || b === 0) return;
+      if (a === 0 || b === 0 || isGhost(a) || isGhost(b)) return;
       const e = buildGame(team(a), team(b));
       e.autoMine = true;
       e.run(MODE.GAME);
@@ -294,7 +330,7 @@ function createService(seed) {
       year: S.year, mode: S.mode, league: S.league, day: S.day, length: S.length,
       leagueLabel: LEAGUE_LABEL[S.league], started: S.started !== false, myName: myTeam().name, myGroup: myTeam().group,
       allStar: { ...S.allStar, due: allStarDue() }, done: S.done, champion: S.champion, tp: S.tp, difficulty: S.difficulty,
-      today: oppId === null ? null : { opponent: team(oppId).name, oppStrength: teamStrength(team(oppId)) },
+      today: oppId === null ? null : isGhost(oppId) ? { opponent: '휴식일', oppStrength: 0, bye: true } : { opponent: team(oppId).name, oppStrength: teamStrength(team(oppId)) },
       myStrength: teamStrength(myTeam()),
       standings: standings(), recent: S.recent.slice(-5).reverse(), news: S.news,
       offerCount: (S.offers || []).length,
@@ -398,6 +434,7 @@ function createService(seed) {
     }
     if (S.done) return [409, { error: '시즌이 끝났습니다. 새 시즌을 시작하세요.' }];
     if (allStarDue()) return [409, { error: '올스타전 휴식기입니다. 홈에서 올스타전을 지휘하거나 자동으로 치르세요.' }];
+    if (isBye()) return [409, { error: '오늘은 우리 팀 휴식일입니다. 홈에서 오늘 경기 자동 / 7일 자동 진행으로 넘겨 주세요.' }];
     const m = myTeam(), opp = team(todayMatch());
     let lineup = null;
     if (body.lineup && body.lineup.length) {
@@ -463,6 +500,7 @@ function createService(seed) {
     let stoppedForAllStar = false;
     for (let i = 0; i < days && !S.done; i++) {
       if (allStarDue()) { stoppedForAllStar = true; break; }     // 올스타전 앞에서 멈춤
+      if (isBye()) { finishDay(null); continue; }
       const e = buildGame(myTeam(), team(todayMatch()), { difficulty: S.difficulty });
       e.autoMine = true;
       e.run(MODE.GAME);
@@ -516,7 +554,8 @@ function createService(seed) {
   // ── 국가대표 대회 (조별리그 → 4강 → 결승) ──
   const RR = [[[0, 1], [2, 3]], [[0, 2], [1, 3]], [[0, 3], [1, 2]]];
   function buildNation(code, era) {
-    const cands = DB.filter(p => p.country === code && (era === 'legend' || p.last >= LEAGUES[p.league].last - 2));
+    const inEra = p => era === 'legend' ? true : S.mode === 'year' ? p.first <= S.year && p.last >= S.year : p.last >= LEAGUES[p.league].last - 2;     // 연도 선택 모드: 그 해 현역
+    const cands = DB.filter(p => p.country === code && inEra(p));
     const best = new Map();                 // 동일인은 가장 높은 능력치 한 명
     cands.forEach(p => { const k = pk(p); if (!best.has(k) || best.get(k).ovr < p.ovr) best.set(k, p); });
     return pickRoster([...best.values()], new Set()).map(p => p.id);
@@ -622,6 +661,7 @@ function createService(seed) {
   // 나이: 현역 선수는 실제 나이, 은퇴 선수(레전드)는 전성기 나이로 시작
   function initAge(p) {
     if (!p.birthYear) return;
+    if (S.mode === 'year') { p.age = Math.max(18, S.year - p.birthYear); return; }
     const lg = LEAGUES[p.league];
     p.age = lg && p.last >= lg.last - 1 ? S.year - p.birthYear : Math.max(20, (p.era || 0) - p.birthYear || p.age);
   }
@@ -1033,12 +1073,12 @@ function createService(seed) {
     if (key === 'GET api/season') res = [200, seasonView()];
     else if (key === 'POST api/teams') {
       const lg = LEAGUE_KEYS.includes(body.league) ? body.league : 'KBO';
-      res = [200, { league: lg, teams: teamPreview(lg, body.mode === 'legend' ? 'legend' : 'current') }];
+      res = [200, { league: lg, teams: teamPreview(lg, ['legend', 'year'].includes(body.mode) ? body.mode : 'current', body.year) }];
     }
     else if (key === 'POST api/season/new') {
       newSeason({ length: Number(body.length || 36), team: body.team || null,
         difficulty: DIFFICULTY[body.difficulty] ? body.difficulty : 'NORMAL', keep: !!body.keep,
-        mode: body.mode === 'legend' ? 'legend' : 'current', league: LEAGUE_KEYS.includes(body.league) ? body.league : 'KBO' });
+        mode: ['legend', 'year'].includes(body.mode) ? body.mode : 'current', year: body.year, league: LEAGUE_KEYS.includes(body.league) ? body.league : 'KBO' });
       res = [200, seasonView()];
     } else if (key === 'POST api/season/quick') res = quick(clamp(Number(body.days || 1), 1, 200));
     else if (key === 'GET api/stats') res = [200, statsView()];
