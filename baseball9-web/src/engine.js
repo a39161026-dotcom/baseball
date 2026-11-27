@@ -185,6 +185,8 @@ class GameEngine {
     this.gs = gs; this.rng = makeRng(seed); this.difficulty = difficulty; this.pitchCall = 'AUTO';
     this.pendingBunt = false; this.pendingSteal = -1; this.pendingIbb = false;
     this.queue = []; this.atBatFresh = true; this.decisionAck = false;
+    this.cosRng = makeRng(((seed === undefined ? 1 : seed) ^ 0x5bd1e995) >>> 0);   // 구종·구속·코스(화면용): 경기 결과 난수와 분리
+    this.plate = []; this.plateKey = '';      // 현재(또는 직전) 타석의 투구 기록
     this.bat = new Map();      // 선수 id -> 이번 경기 타격 기록
     this.autoMine = false;     // true 면 우리 팀 투수 교체도 코치(AI)가 판단
     const { mine, theirs } = gs;
@@ -297,23 +299,27 @@ class GameEngine {
 
     const bk = this.batterSkills(batter, bOvr), pks = this.pitcherSkills(pitcher, pOvr);
     const pitch = this.throwPitch(bk, pks, pOvr, call);
+    const ev = this.recordPitch(pitch, pitcher, pOvr, batter, call);
+    const tag = `[${ev.type} ${ev.speed}km/h] `;
     this.atBatFresh = false;
     line.addPitch(pitcher.pos === 'SP' ? 0.6 : 1.2);
     gs.pitchTotal++;
 
     if (pitch === 'BALL') {
       gs.balls++;
-      r.add('PITCH', C.ball(this.rng) + this.count());
+      r.add('PITCH', tag + C.ball(this.rng) + this.count());
       if (gs.balls >= 4) { this.walk(r, off, dfn, batter, false); this.endAtBat(r, off); }
     } else if (pitch === 'WHIFF' || pitch === 'CALLED') {
       gs.strikes++;
-      r.add('PITCH', (pitch === 'WHIFF' ? C.whiff(this.rng) : C.called(this.rng)) + this.count());
+      r.add('PITCH', tag + (pitch === 'WHIFF' ? C.whiff(this.rng) : C.called(this.rng)) + this.count());
       if (gs.strikes >= 3) { this.strikeout(r, dfn, batter, pitch === 'CALLED'); this.endAtBat(r, off); }
     } else if (pitch === 'FOUL') {
       if (gs.strikes < 2) gs.strikes++;
-      r.add('PITCH', C.foul(this.rng) + this.count());
+      r.add('PITCH', tag + C.foul(this.rng) + this.count());
     } else {
+      const n0 = r.lines.length;
       this.contact(r, off, dfn, batter, bk, pOvr, call);
+      ev.outcome = r.lines.slice(n0).some(([k]) => k === 'HIT') ? 'hit' : 'out';
       this.endAtBat(r, off);
     }
     this.finish(r);
@@ -321,6 +327,41 @@ class GameEngine {
   }
 
   count() { return `  [${this.gs.balls}-${this.gs.strikes}]`; }
+
+  // 화면용 투구 기록: 구종·구속·스트라이크존 위치. 결과(볼/스트라이크/타격)는 이미 정해진 뒤에 꾸미므로 경기에는 영향 없음
+  repertoire(p) {
+    if (p._rep) return p._rep;
+    const set = ['슬라이더', '커브', '체인지업', '포크볼', '커터', '싱커', '투심'];
+    let h = 7;
+    for (const ch of String(p.id || p.name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const rep = ['직구'];
+    const n = 2 + (h % 2);
+    for (let i = 0; i < n; i++) rep.push(set.splice((h >>> (i * 3 + 1)) % set.length, 1)[0]);
+    p._rep = rep;
+    return rep;
+  }
+  recordPitch(pitch, pitcher, pOvr, batter, call) {
+    const gs = this.gs, R = this.cosRng, key = gs.inning + (gs.top ? 't' : 'b') + (batter ? batter.id : '');
+    if (key !== this.plateKey) { this.plateKey = key; this.plate = []; }
+    const rep = this.repertoire(pitcher);
+    let type = '직구';
+    if (call === 'BREAKING') type = rep[1 + R.randrange(rep.length - 1)];
+    else if (call !== 'FASTBALL' && R.random() > 0.5) type = rep[1 + R.randrange(rep.length - 1)];
+    const delta = { 직구: 0, 투심: -3, 싱커: -4, 커터: -5, 슬라이더: -11, 체인지업: -13, 포크볼: -12, 커브: -21 }[type];
+    const base = 134 + (pOvr - 50) * 0.32 + (pitcher.pos === 'RP' ? 2 : 0);
+    const speed = Math.max(112, Math.min(160, Math.round(base + delta + R.random() * 5 - 2)));
+    const edge = () => (R.random() < 0.5 ? -1 : 1) * (0.7 + R.random() * 0.3);
+    let x, y;
+    if (pitch === 'BALL') {
+      if (R.random() < 0.5) { x = (R.random() < 0.5 ? -1 : 1) * (1.15 + R.random() * 0.5); y = R.random() * 2.4 - 1.2; }
+      else { x = R.random() * 2.4 - 1.2; y = (R.random() < 0.5 ? -1 : 1) * (1.15 + R.random() * 0.4); }
+    } else if (pitch === 'WHIFF') { x = R.random() * 2.1 - 1.05; y = R.random() * 1.3 - 1.1; }
+    else if (pitch === 'CALLED') { if (R.random() < 0.5) { x = edge(); y = R.random() * 1.8 - 0.9; } else { x = R.random() * 1.8 - 0.9; y = edge(); } }
+    else { x = (R.random() + R.random() - 1) * 0.95; y = (R.random() + R.random() - 1) * 0.95; }
+    const ev = { n: this.plate.length + 1, res: pitch, type, speed, x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
+    this.plate.push(ev);
+    return ev;
+  }
 
   // 세부 능력치 반영: 종합 능력치(OVR)에는 이미 컨택·파워·선구가 섞여 있으므로, 선수 본인 평균 대비 편차만 0.5 배로 반영
   // (스타일만 달라지고 전체 득점 환경은 유지). 세부 능력치가 없으면(신인 등) 종합 능력치 그대로

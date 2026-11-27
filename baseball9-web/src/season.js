@@ -323,6 +323,19 @@ function createService(seed) {
     return d;
   };
   const ls = (t, cols) => [...t.runsByInning, ...Array(cols - t.runsByInning.length).fill(null)];
+  // 수비 위치별 선수 이름 (경기 화면 '주루보기'용)
+  function defenseMap(t) {
+    const m = { P: t.pitcher ? t.pitcher.name : '' }, used = new Set();
+    const lineup = t.lineup.filter(p => !p.isPitcher), cor = ['C', '1B', '2B', '3B', 'SS'];
+    cor.forEach(pos => { const p = lineup.find(x => x.pos === pos && !used.has(x)); if (p) { used.add(p); m[pos] = p.name; } });
+    const of = lineup.filter(x => x.pos === 'OF');
+    ['LF', 'CF', 'RF'].forEach(pos => { const p = of.shift(); if (p) { used.add(p); m[pos] = p.name; } });
+    const rest = lineup.filter(x => !used.has(x));
+    [...cor, 'LF', 'CF', 'RF'].forEach(pos => { if (!m[pos] && rest.length) m[pos] = rest.shift().name; });
+    return m;
+  }
+  const upNext = (t, n) => t.lineup.length ? [1, 2, 3].slice(0, n).map(k => ({ no: (t.currentSlot + k) % t.lineup.length + 1, name: t.lineup[(t.currentSlot + k) % t.lineup.length].name })) : [];
+
   function stateDict(g) {
     const { engine: e } = g, gs = e.gs, { mine, theirs } = gs;
     const cols = Math.max(9, mine.runsByInning.length, theirs.runsByInning.length);
@@ -337,6 +350,7 @@ function createService(seed) {
       pitchTotal: gs.pitchTotal, done: gs.done, difficulty: e.difficulty,
       lineup: mine.lineup.map((p, i) => ({ ...pdict(p), current: i === curSlot })),
       batter: batter ? pdict(batter) : null,
+      plate: e.plate, defense: defenseMap(gs.defense()), upNext: upNext(gs.offense(), 3), batterNo: gs.offense().currentSlot + 1,
       myPitcher: mine.pitcher ? pdict(mine.pitcher, mine.currentLine()) : null,
       oppPitcher: theirs.pitcher ? pdict(theirs.pitcher, theirs.currentLine()) : null,
       needsDecision: needs, decisionKind: needs ? (gs.top ? 'offense' : 'defense') : null,
