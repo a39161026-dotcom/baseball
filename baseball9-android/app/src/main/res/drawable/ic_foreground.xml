@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- 야구공: 흰 원 + 붉은 실밥 -->
+    <path android:fillColor="#F5F1E6" android:pathData="M54,54m-26,0a26,26 0 1,1 52,0a26,26 0 1,1 -52,0" />
+    <path android:strokeColor="#D9473A" android:strokeWidth="2.4" android:fillColor="#00000000"
+        android:pathData="M38,34 C46,42 46,66 38,74" />
+    <path android:strokeColor="#D9473A" android:strokeWidth="2.4" android:fillColor="#00000000"
+        android:pathData="M70,34 C62,42 62,66 70,74" />
+</vector>
