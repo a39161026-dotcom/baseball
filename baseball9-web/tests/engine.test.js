@@ -184,21 +184,6 @@ test('실존 선수: 현역 리그는 2025 소속, 레전드 리그는 최다 �
   assert.strictEqual(new Set(ids).size, ids.length, '한 선수가 두 팀에 없음');
 });
 
-test('우리 팀 강도는 상대 평균 기준으로 조절됨', () => {
-  const avgOf = r => r.reduce((a, p) => a + p.ovr, 0) / r.length;
-  const res = {};
-  for (const level of ['weak', 'mid', 'strong']) {
-    const svc = createService(31);
-    svc.dispatch('POST', '/api/season/new', { mode: 'current', level });
-    const ai = svc.state.teams.slice(1).map(t => avgOf(t.roster));
-    res[level] = avgOf(svc.state.teams[0].roster) - ai.reduce((a, b) => a + b, 0) / ai.length;
-    assert.ok(svc.state.teams[0].roster.filter(p => !p.isPitcher).length >= 9);
-    assert.ok(svc.state.teams[0].roster.filter(p => p.pos === 'SP').length >= 5);
-  }
-  assert.ok(res.weak < res.mid && res.mid < res.strong, JSON.stringify(res));
-  assert.ok(Math.abs(res.mid) < 4, '중위권은 평균 근처: ' + res.mid);
-});
-
 test('영입·방출', () => {
   const svc = createService(41);
   svc.dispatch('POST', '/api/season/new', { league: 'KBO' });     // 자유 리그는 영입 상한 없음
@@ -380,109 +365,58 @@ test('새 리그를 시작하면 이전 리그의 훈련 효과가 남지 않음
   assert.strictEqual(again.ovr, target.ovr);
 });
 
-test('커리어: 아마추어에서 시작해 단계별 승격·강등', () => {
+test('팀 선택: 리그별 팀 목록과 전력·스타 선수 미리보기', () => {
   const svc = createService(71);
-  let s = svc.dispatch('GET', '/api/season').payload;
-  assert.ok(s.career && s.career.tier === 0 && /아마추어/.test(s.leagueLabel), '처음엔 아마추어');
-  const T0 = svc.state.teams.slice(1);
-  assert.strictEqual(svc.state.teams.length, 10);
-  assert.ok(T0.every(t => t.roster.every(p => p.ovr >= 46 && p.ovr <= 56)), '아마추어 선수 능력치 대역');
-  // 영입 상한
-  const ruth = svc.dispatch('POST', '/api/scout/search', { q: 'babe ruth' }).payload;
-  assert.strictEqual(ruth.cap, 60);
-  const browse = svc.dispatch('POST', '/api/scout/search', {}).payload;
-  assert.ok(browse.results.length > 0 && browse.results.every(p => p.ovr <= 60), '이름 검색이 아니면 영입 가능한 선수만');
-  svc.state.tp = 999;
-  const r = svc.dispatch('POST', '/api/scout/sign', { id: ruth.results[0].id });
-  assert.strictEqual(r.status, 409);
-  assert.ok(/아마추어/.test(r.payload.error));
-  // 우리 팀을 강하게 → 시즌 종료 시 승격
-  svc.state.teams[0].roster.forEach(p => { p.ovr += 15; });
-  svc.dispatch('POST', '/api/season/quick', { days: 100 });
-  svc.dispatch('POST', '/api/allstar/auto', {});
-  svc.dispatch('POST', '/api/season/quick', { days: 100 });
-  s = svc.dispatch('GET', '/api/season').payload;
-  assert.ok(s.done && s.career.result.up, s.career.result.msg);
-  const saved = JSON.parse(JSON.stringify(svc.exportState()));
-  const myIds = svc.state.teams[0].roster.map(p => p.id).sort();
-  svc.dispatch('POST', '/api/season/new', { keep: true });
-  s = svc.dispatch('GET', '/api/season').payload;
-  assert.strictEqual(s.career.tier, 1);
-  assert.ok(/루키/.test(s.leagueLabel));
-  assert.deepStrictEqual(svc.state.teams[0].roster.map(p => p.id).filter(id => myIds.includes(id)).sort(), myIds, '우리 팀은 이어짐');
-  const persons = svc.state.teams.flatMap(t => t.roster.map(p => p.person || p.id));
-  assert.strictEqual(new Set(persons).size, persons.length, '상대에 우리 선수 중복 없음');
-  // 약하면 강등 (루키 → 아마추어)
-  svc.state.teams[0].roster.forEach(p => { p.ovr = 40; });
-  svc.dispatch('POST', '/api/season/quick', { days: 100 });
-  svc.dispatch('POST', '/api/allstar/auto', {});
-  svc.dispatch('POST', '/api/season/quick', { days: 100 });
-  s = svc.dispatch('GET', '/api/season').payload;
-  assert.ok(s.career.result.down, s.career.result.msg);
-  // 저장/불러오기
-  const svc2 = createService(1);
-  assert.ok(svc2.importState(saved));
-  assert.ok(svc2.dispatch('GET', '/api/season').payload.career.result.up);
+  const expect = { KBO: 10, NPB: 12, MLB: 30, WORLD: 12 };
+  for (const league of Object.keys(expect)) {
+    const r = svc.dispatch('POST', '/api/teams', { league, mode: 'current' }).payload;
+    assert.strictEqual(r.teams.length, expect[league], league);
+    assert.ok(r.teams.every(t => t.count >= 18 && t.stars.length === 4 && t.bats.length >= 4 && t.pitchers.length === 3), league);
+    for (let i = 1; i < r.teams.length; i++) assert.ok(r.teams[i - 1].strength >= r.teams[i].strength, '전력 내림차순');
+  }
+  const kbo = svc.dispatch('POST', '/api/teams', { league: 'KBO', mode: 'current' }).payload.teams;
+  assert.ok(kbo.some(t => t.name === '삼성라이온즈' && t.stars.some(p => p.name === '구자욱')), '삼성에 구자욱');
 });
 
-test('커리어 단계별 상대 전력이 점점 강해짐', () => {
+test('팀 선택 후 시작: 고른 팀이 우리 팀, 그 팀의 실제 선수가 기본 로스터', () => {
   const svc = createService(72);
-  const avg = r => r.reduce((a, p) => a + p.ovr, 0) / r.length;
-  const levels = [];
-  for (let t = 0; t < 6; t++) {
-    levels.push(svc.state.teams.slice(1).reduce((a, x) => a + avg(x.roster), 0) / (svc.state.teams.length - 1));
-    svc.state.career.next = Math.min(5, t + 1);
-    svc.state.done = true;
-    svc.dispatch('POST', '/api/season/new', { keep: true });
+  assert.strictEqual(svc.dispatch('GET', '/api/season').payload.started, false, '처음엔 시작 전');
+  for (const [league, mode, team] of [['KBO', 'current', '삼성라이온즈'], ['MLB', 'current', '뉴욕 양키스'], ['NPB', 'current', '요미우리 자이언츠'], ['KBO', 'legend', 'KIA타이거즈']]) {
+    const r = svc.dispatch('POST', '/api/season/new', { league, mode, team, length: 18 });
+    assert.strictEqual(r.status, 200);
+    const s = svc.dispatch('GET', '/api/season').payload;
+    assert.ok(s.started && s.myName === team, team);
+    const me = svc.state.teams[0];
+    assert.ok(me.user && me.name === team);
+    assert.ok(me.roster.filter(p => !p.isPitcher).length >= 9 && me.roster.filter(p => p.isPitcher).length >= 5, team + ' 구성');
+    if (mode === 'current') assert.ok(me.roster.every(p => p.team === team), team + ' 현역 소속 선수만');
+    const persons = svc.state.teams.flatMap(t => t.roster.map(p => p.person || p.id));
+    assert.strictEqual(new Set(persons).size, persons.length, '같은 사람이 두 팀에 없음');
+    assert.ok(!svc.state.teams.slice(1).some(t => t.name === team), '고른 팀은 상대에서 빠짐');
   }
-  for (let i = 1; i < levels.length; i++) assert.ok(levels[i] > levels[i - 1], JSON.stringify(levels.map(x => x.toFixed(1))));
-});
-
-test('AI 트레이드 제안: 4일마다 들어오고 수락하면 성사, 선수단이 바뀌면 사라짐', () => {
-  const svc = createService(81);
-  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 36 });
-  assert.strictEqual(svc.dispatch('GET', '/api/trade/offers').payload.offers.length, 0, '시작 직후에는 없음');
-  svc.dispatch('POST', '/api/season/quick', { days: 4 });
-  const { offers } = svc.dispatch('GET', '/api/trade/offers').payload;
-  assert.ok(offers.length >= 1, '4일 뒤 제안 도착');
-  assert.ok(svc.dispatch('GET', '/api/season').payload.offerCount >= 1);
-  const o = offers[0], me = svc.state.teams[0];
-  assert.ok(me.roster.some(p => p.id === o.give.id) && !me.roster.some(p => p.id === o.get.id));
-  assert.ok(o.get.value * 1.05 <= o.give.value, 'AI 에게 유리한 조건');
-  assert.ok(/드리겠습니다/.test(o.message));
-  // 수락
-  const r = svc.dispatch('POST', '/api/trade/accept', { id: o.id });
-  assert.strictEqual(r.status, 200, JSON.stringify(r.payload));
-  assert.ok(me.roster.some(p => p.id === o.get.id) && !me.roster.some(p => p.id === o.give.id));
-  assert.ok(!svc.dispatch('GET', '/api/trade/offers').payload.offers.some(x => x.id === o.id));
-  // 거절하면 사라짐, 선수가 사라진 제안도 정리
-  if (offers[1]) {
-    assert.strictEqual(svc.dispatch('POST', '/api/trade/decline', { id: offers[1].id }).status, 200);
-    assert.ok(!svc.dispatch('GET', '/api/trade/offers').payload.offers.some(x => x.id === offers[1].id));
-  }
-  if (offers[2]) {
-    svc.dispatch('POST', '/api/release', { id: offers[2].give.id });
-    assert.ok(!svc.dispatch('GET', '/api/trade/offers').payload.offers.some(x => x.id === offers[2].id), '내보낼 선수가 없으면 제안 소멸');
-  }
-  // 저장/불러오기
-  svc.dispatch('POST', '/api/season/quick', { days: 4 });
+  // 선택한 팀의 스타가 실제로 우리 선수
+  svc.dispatch('POST', '/api/season/new', { league: 'MLB', mode: 'current', team: '뉴욕 양키스' });
+  assert.ok(svc.state.teams[0].roster.some(p => p.name === 'Aaron Judge'), '양키스에 저지');
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', mode: 'legend', team: '삼성라이온즈' });
+  assert.ok(svc.state.teams[0].roster.some(p => ['양준혁', '오승환', '이승엽(76)'].includes(p.name)), '레전드 삼성');
+  // 시즌 진행·저장
+  svc.dispatch('POST', '/api/season/quick', { days: 5 });
   const saved = JSON.parse(JSON.stringify(svc.exportState()));
   const svc2 = createService(1);
   assert.ok(svc2.importState(saved));
-  assert.strictEqual(svc2.dispatch('GET', '/api/trade/offers').payload.offers.length, svc.dispatch('GET', '/api/trade/offers').payload.offers.length);
+  const a = svc.dispatch('GET', '/api/season').payload, b = svc2.dispatch('GET', '/api/season').payload;
+  assert.strictEqual(b.myName, a.myName);
+  assert.strictEqual(b.day, 5);
+  // 폐지된 커리어 저장은 무시
+  assert.strictEqual(createService(2).importState({ version: 4, career: { tier: 0 } }), false);
 });
 
-test('세부 능력치: 데이터 반영과 엔진 효과 (컨택형 > 균형형 > 파워형 타율, 주루 높을수록 도루 성공)', () => {
-  const svc = createService(82);
-  const ich = svc.dispatch('POST', '/api/scout/search', { q: 'ichiro suzuki', league: 'MLB' }).payload.results[0];
-  assert.ok(ich.sub && ich.sub[0] >= 90 && ich.sub[3] >= 90 && ich.sub[1] <= 50, '이치로: 컨택·주루 높고 파워 낮음 ' + ich.sub);
-  const ryan = svc.dispatch('POST', '/api/scout/search', { q: 'nolan ryan' }).payload.results[0];
-  assert.ok(ryan.sub[0] >= 90 && ryan.sub[1] <= 40, '놀란 라이언: 탈삼진 높고 제구 낮음 ' + ryan.sub);
-  const { run } = require('./measure');
-  const bal = run([50, 50, 50, 50], [50, 50], 250), con = run([85, 25, 50, 50], [50, 50], 250), pow = run([35, 95, 50, 50], [50, 50], 250);
-  assert.ok(Number(con.AVG) > Number(bal.AVG) + 0.03, `컨택형 타율 ${con.AVG} vs ${bal.AVG}`);
-  assert.ok(Number(pow.AVG) < Number(bal.AVG), `파워형 타율 ${pow.AVG}`);
-  assert.ok(Number(pow.HR9) > Number(bal.HR9), `파워형 홈런 ${pow.HR9} vs ${bal.HR9}`);
+test('팀마다 전력이 달라 순위 경쟁이 갈림 (강팀 vs 약팀)', () => {
+  const picks = svcTeams => svcTeams;
+  const svc = createService(73);
+  const t = svc.dispatch('POST', '/api/teams', { league: 'KBO', mode: 'current' }).payload.teams;
+  const strong = t[0], weak = t[t.length - 1];
+  assert.ok(strong.strength - weak.strength >= 3, `${strong.name} ${strong.strength} vs ${weak.name} ${weak.strength}`);
 });
 
 test('밸런스: 팀당 득점이 현실 범위', () => {
