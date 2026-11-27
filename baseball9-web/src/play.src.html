@@ -156,6 +156,8 @@
   .career-msg { font-size: 18px; font-weight: 800; margin: 0 0 8px; }
   .lg { font-size: 10.5px; padding: 1px 5px; border-radius: 4px; margin-left: 4px; vertical-align: 1px; font-weight: 700; }
   .lg-KBO { background: #1d3a5a; color: #9cc9f5; } .lg-NPB { background: #5a1d2a; color: #f5a3b5; } .lg-MLB { background: #1d4a2f; color: #a3f5bd; }
+  .skills { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+  .skills b { font-variant-numeric: tabular-nums; }
   .scout-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding-block: 8px; border-bottom: 1px solid var(--line); }
   .scout-row:last-child { border-bottom: 0; }
   .scout-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
@@ -239,6 +241,7 @@
       <div class="panel"><p class="title">최근 우리 경기</p><div id="recentList" class="muted"></div></div>
       <div class="panel"><p class="title">오늘 다른 구장</p><div id="newsList" class="muted"></div></div>
     </div>
+    <div class="panel" id="offerHome" hidden><p class="title">📨 트레이드 제안</p><p id="offerHomeText" style="margin:0 0 8px"></p><button class="gold sm" id="goOffers">제안 보기</button></div>
     <div class="panel"><p class="title">🗣 라커룸</p><div id="homeVoices" class="muted"></div>
       <button class="sm" id="goLocker" style="margin-top:8px">라커룸 전체 보기</button></div>
     <div class="panel"><p class="title">순위 (상위 5)</p><div class="scroll-x"><table class="stand" id="miniStand"></table></div></div>
@@ -426,6 +429,11 @@
       <div id="draftPool"></div>
       <details style="margin-top:10px"><summary class="lbl">지명 기록</summary><div id="draftPicks" class="side"></div></details>
     </div>
+    <div class="panel" id="offerPanel" hidden>
+      <p class="title">📨 받은 트레이드 제안</p>
+      <p class="muted" style="margin:0 0 8px">AI 구단이 먼저 보낸 제안입니다. 4일마다 새로 들어오고, 선수단이 바뀌면 사라집니다.</p>
+      <div id="offerList"></div>
+    </div>
     <div class="panel">
       <p class="title">🤝 트레이드</p>
       <p class="muted" style="margin:0 0 8px">상대 구단을 고르고 주고받을 선수를 체크하세요. 가치는 능력치(높을수록 급격히 비쌈)·잠재력·나이로 매깁니다. 상대는 자기가 손해 보는 거래는 받지 않습니다.</p>
@@ -609,10 +617,13 @@
       : '아직 경기 기록이 없습니다.';
     $('newsList').innerHTML = s.news.length ? s.news.map(n => `<div class="newsline">${esc(n)}</div>`).join('') : '경기를 하면 다른 구장 결과가 나옵니다.';
     $('miniStand').innerHTML = standRows(s.standings.slice(0, 5));
+    $('offerHome').hidden = !s.offerCount;
+    $('offerHomeText').textContent = `다른 구단에서 트레이드 제안이 ${s.offerCount}건 들어와 있습니다.`;
     $('homeVoices').innerHTML = s.voices.length ? s.voices.map(voiceHtml).join('') : '경기를 하면 선수들이 한마디씩 합니다.';
   }
   $('goPlay').onclick = () => go('play');
   $('goDraft').onclick = () => go('office');
+  $('goOffers').onclick = () => go('office');
   $('goLocker').onclick = () => { go('office'); setTimeout(() => $('lockerPanel').scrollIntoView(), 50); };
   const MOOD_ICON = { happy: '😄', sad: '😔', angry: '😠', neutral: '💬' };
   const voiceHtml = v => `<div class="voice ${esc(v.mood)}"><div>${MOOD_ICON[v.mood] || '💬'}</div><div><div class="txt">“${esc(v.text)}”</div>` +
@@ -673,7 +684,7 @@
       const p = hitters.find(x => x.id === id);
       const li = document.createElement('li');
       li.style.marginBottom = '6px';
-      li.innerHTML = `<div style="display:flex;gap:6px;align-items:center"><span style="flex:1;min-width:0"><span class="muted">[${esc(p.pos)}]</span> ${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''} <span class="muted">OVR ${p.effOvr} · 피로 ${p.fatigue}</span></span><span class="mv" style="display:flex;gap:4px;flex:none"></span></div>`;
+      li.innerHTML = `<div style="display:flex;gap:6px;align-items:center"><span style="flex:1;min-width:0"><span class="muted">[${esc(p.pos)}]</span> ${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''} <span class="muted">OVR ${p.effOvr} · 피로 ${p.fatigue}</span>${skillHtml(p.pos, p.sub)}</span><span class="mv" style="display:flex;gap:4px;flex:none"></span></div>`;
       const up = mkBtn('▲', () => { [manualLineup[i - 1], manualLineup[i]] = [manualLineup[i], manualLineup[i - 1]]; renderSetup(); });
       const dn = mkBtn('▼', () => { [manualLineup[i + 1], manualLineup[i]] = [manualLineup[i], manualLineup[i + 1]]; renderSetup(); });
       up.disabled = i === 0; dn.disabled = i === manualLineup.length - 1;
@@ -927,9 +938,9 @@
     $('leaders').innerHTML =
       card('타율', L.avg, x => avg3(x.h, x.ab)) + card('홈런', L.hr, x => x.hr) + card('타점', L.rbi, x => x.rbi) +
       card('OPS', L.ops, x => x.ops.toFixed(3)) + card('평균자책점', L.era, x => x.era.toFixed(2)) +
-      card('탈삼진', L.k, x => x.k) + card('다승', L.w, x => `${x.w}승`);
-    $('myBat').innerHTML = '<tr><th style="text-align:left">선수</th><th>경기</th><th>타율</th><th>타수</th><th>안타</th><th>2루타</th><th>홈런</th><th>타점</th><th>득점</th><th>볼넷</th><th>삼진</th><th>OPS</th></tr>' +
-      [...st.myBatters].sort((a, b) => b.pa - a.pa).map(b => `<tr><td class="t">${esc(b.name)} <span class="muted">${esc(b.pos)}</span></td><td>${b.g}</td><td>${avg3(b.h, b.ab)}</td><td>${b.ab}</td><td>${b.h}</td><td>${b.d2}</td><td>${b.hr}</td><td>${b.rbi}</td><td>${b.r}</td><td>${b.bb}</td><td>${b.k}</td><td>${b.pa ? b.ops.toFixed(3) : '-'}</td></tr>`).join('');
+      card('탈삼진', L.k, x => x.k) + card('다승', L.w, x => `${x.w}승`) + card('도루', L.sb, x => x.sb);
+    $('myBat').innerHTML = '<tr><th style="text-align:left">선수</th><th>경기</th><th>타율</th><th>타수</th><th>안타</th><th>2루타</th><th>홈런</th><th>타점</th><th>득점</th><th>볼넷</th><th>삼진</th><th>도루</th><th>OPS</th></tr>' +
+      [...st.myBatters].sort((a, b) => b.pa - a.pa).map(b => `<tr><td class="t">${esc(b.name)} <span class="muted">${esc(b.pos)}</span></td><td>${b.g}</td><td>${avg3(b.h, b.ab)}</td><td>${b.ab}</td><td>${b.h}</td><td>${b.d2}</td><td>${b.hr}</td><td>${b.rbi}</td><td>${b.r}</td><td>${b.bb}</td><td>${b.k}</td><td>${b.sb || 0}</td><td>${b.pa ? b.ops.toFixed(3) : '-'}</td></tr>`).join('');
     $('myPit').innerHTML = '<tr><th style="text-align:left">선수</th><th>경기</th><th>선발</th><th>승</th><th>패</th><th>이닝</th><th>평균자책점</th><th>피안타</th><th>볼넷</th><th>삼진</th></tr>' +
       st.myPitchers.map(p => `<tr><td class="t">${esc(p.name)} <span class="muted">${esc(p.pos)}</span></td><td>${p.g}</td><td>${p.gs}</td><td>${p.w}</td><td>${p.l}</td><td>${p.ip}</td><td>${p.era === null ? '-' : p.era.toFixed(2)}</td><td>${p.h}</td><td>${p.bb}</td><td>${p.k}</td></tr>`).join('');
   }
@@ -943,7 +954,7 @@
       row.className = 'train-row';
       const fColor = p.fatigue > 60 ? 'var(--red)' : p.fatigue > 35 ? 'var(--gold)' : 'var(--led)';
       row.innerHTML = `<div><div class="nm">${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)}</span></div>` +
-        `<div class="sub">${p.age}세 · OVR ${p.ovr} / 잠재력 ${p.potential} · <span style="color:${fColor}">피로 ${p.fatigue}%</span> · 사기 ${p.mood} ${p.morale}${p.rookie ? ' · 🌱신인' : ''}</div></div>`;
+        `<div class="sub">${p.age}세 · OVR ${p.ovr} / 잠재력 ${p.potential} · <span style="color:${fColor}">피로 ${p.fatigue}%</span> · 사기 ${p.mood} ${p.morale}${p.rookie ? ' · 🌱신인' : ''}</div>${skillHtml(p.pos, p.sub)}</div>`;
       const up = document.createElement('button');
       up.className = 'order sm'; up.textContent = `능력 +1 (${p.trainCost}P)`;
       up.disabled = lg.tp < p.trainCost || p.ovr >= p.potential;
@@ -986,6 +997,13 @@
 
   // ── 영입 ──
   const lgTag = lg => lg ? `<span class="lg lg-${esc(lg)}">${esc(lg)}</span>` : '';
+  // 세부 능력치: 타자 컨택·파워·선구·주루 / 투수 탈삼진·제구 (색: 70+ 초록, 35 미만 빨강)
+  const skillColor = v => v >= 70 ? 'var(--led)' : v < 35 ? 'var(--red)' : 'var(--dim)';
+  const skillHtml = (pos, sub) => {
+    if (!sub || !sub.length) return '';
+    const names = (pos === 'SP' || pos === 'RP') ? ['탈삼진', '제구'] : ['컨택', '파워', '선구', '주루'];
+    return '<div class="skills">' + names.map((n, i) => `<span>${n} <b style="color:${skillColor(sub[i])}">${sub[i]}</b></span>`).join('') + '</div>';
+  };
   let scoutTimer = null;
   function renderScout() {
     const r = api('POST', '/api/scout/search', { q: $('scoutQ').value, league: $('scoutLeague').value, pos: $('scoutPos').value, limit: 50 });
@@ -1000,7 +1018,7 @@
       const years = p.first ? `${p.first}–${p.last}` : '';
       const owner = p.owner ? ` · <b style="color:${p.owner === '나의 팀' ? 'var(--led)' : 'var(--dim)'}">${esc(p.owner)}</b>` : '';
       row.innerHTML = `<div style="min-width:0"><div class="nm" style="font-weight:600">${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)}</span></div>` +
-        `<div class="sub" style="color:var(--dim);font-size:12px">OVR ${p.ovr}${p.potential > p.ovr ? ' / 잠재력 ' + p.potential : ''} · ${esc(p.team || '')} ${years}${owner}</div></div>`;
+        `<div class="sub" style="color:var(--dim);font-size:12px">OVR ${p.ovr}${p.potential > p.ovr ? ' / 잠재력 ' + p.potential : ''} · ${esc(p.team || '')} ${years}${owner}</div>${skillHtml(p.pos, p.sub)}</div>`;
       const b = document.createElement('button');
       b.className = 'order sm';
       if (p.owner) { b.textContent = p.owner === '나의 팀' ? '우리 팀' : '소속 있음'; b.disabled = true; }
@@ -1063,7 +1081,28 @@
 
   // ── 구단 운영: 드래프트 · 트레이드 · 라커룸 ──
   const pick = { give: new Set(), get: new Set() };
-  function renderOffice() { renderDraft(); renderTrade(); renderLocker(); }
+  function renderOffice() { renderOffers(); renderDraft(); renderTrade(); renderLocker(); }
+  function renderOffers() {
+    const { offers } = api('GET', '/api/trade/offers');
+    $('offerPanel').hidden = !offers.length;
+    const box = $('offerList');
+    box.innerHTML = '';
+    offers.forEach(o => {
+      const row = document.createElement('div');
+      row.className = 'scout-row';
+      const line = (label, p) => `<div><span class="muted">${label}</span> <b>${esc(p.name)}</b>${p.league !== 'KBO' ? lgTag(p.league) : ''} <span class="muted">${esc(p.pos)} · ${p.age}세 · OVR ${p.ovr}${p.potential > p.ovr ? '/' + p.potential : ''} · 가치 ${p.value}</span>${skillHtml(p.pos, p.sub)}</div>`;
+      row.innerHTML = `<div style="min-width:0"><div style="color:var(--gold);font-weight:600;margin-bottom:4px">${esc(o.message)}</div>${line('내보냄', o.give)}${line('받음', o.get)}</div>`;
+      const btns = document.createElement('div');
+      btns.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+      const yes = document.createElement('button'); yes.className = 'gold sm'; yes.textContent = '수락';
+      const no = document.createElement('button'); no.className = 'sm'; no.textContent = '거절';
+      yes.onclick = () => { touched = true; try { const r = api('POST', '/api/trade/accept', { id: o.id }); toast(`트레이드 성사! ${r.give.join(', ')} ↔ ${r.get.join(', ')}`); manualLineup = null; save(); } catch (e) { toast(e.message); } renderOffice(); };
+      no.onclick = () => { touched = true; try { api('POST', '/api/trade/decline', { id: o.id }); save(); } catch (e) { toast(e.message); } renderOffers(); };
+      btns.append(yes, no);
+      row.append(btns);
+      box.appendChild(row);
+    });
+  }
   function renderDraft() {
     const d = api('GET', '/api/draft');
     if (!d.open) {
@@ -1109,7 +1148,7 @@
         cb.type = 'checkbox'; cb.checked = set.has(p.id);
         cb.onchange = () => { if (cb.checked) set.add(p.id); else set.delete(p.id); evalTrade(); };
         const txt = document.createElement('span');
-        txt.innerHTML = `${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''} <span class="muted">${esc(p.pos)} · ${p.age}세 · OVR ${p.ovr}${p.potential > p.ovr ? '/' + p.potential : ''} · 가치 ${p.value}</span>`;
+        txt.innerHTML = `${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''} <span class="muted">${esc(p.pos)} · ${p.age}세 · OVR ${p.ovr}${p.potential > p.ovr ? '/' + p.potential : ''} · 가치 ${p.value}</span>${skillHtml(p.pos, p.sub)}`;
         lab.append(cb, txt);
         el.appendChild(lab);
       });

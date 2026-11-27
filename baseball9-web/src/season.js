@@ -177,7 +177,7 @@ function createService(seed) {
       stats: {}, tp: keep && S ? S.tp : 10, recent: [], news: [], done: false, champion: null,
       allStar: { day: length >= 18 ? Math.floor(length / 2) : -1, done: false, result: null },
       intl: S && S.intl || null, voices: carry ? carry.voices : [], trades: carry ? carry.trades : [],
-      draft: null, devReport,
+      draft: null, devReport, offers: [], offerDay: 0,
     };
     if (!keep) {
       teams.forEach(t => t.roster.forEach(p => { p.ageSet = false; delete p.morale; initAge(p); p.ageSet = true; }));
@@ -236,7 +236,7 @@ function createService(seed) {
 
   // ── 경기 결과 반영 ──
   function batStat(id) {
-    return S.stats[id] && S.stats[id].bat || ((S.stats[id] = S.stats[id] || {}).bat = { g: 0, pa: 0, ab: 0, h: 0, d2: 0, d3: 0, hr: 0, rbi: 0, bb: 0, k: 0, r: 0 });
+    return S.stats[id] && S.stats[id].bat || ((S.stats[id] = S.stats[id] || {}).bat = { g: 0, pa: 0, ab: 0, h: 0, d2: 0, d3: 0, hr: 0, rbi: 0, bb: 0, k: 0, r: 0, sb: 0, cs: 0 });
   }
   function pitStat(id) {
     return S.stats[id] && S.stats[id].pit || ((S.stats[id] = S.stats[id] || {}).pit = { g: 0, gs: 0, outs: 0, h: 0, r: 0, bb: 0, k: 0, w: 0, l: 0, pitches: 0 });
@@ -249,7 +249,7 @@ function createService(seed) {
     engine.bat.forEach((b, id) => {
       const s = batStat(id);
       s.g++;
-      ['pa', 'ab', 'h', 'd2', 'd3', 'hr', 'rbi', 'bb', 'k', 'r'].forEach(k => { s[k] += b[k]; });
+      ['pa', 'ab', 'h', 'd2', 'd3', 'hr', 'rbi', 'bb', 'k', 'r', 'sb', 'cs'].forEach(k => { s[k] = (s[k] || 0) + (b[k] || 0); });
     });
     // 투수 기록 + 승패 투수
     const aWin = gs.mine.score > gs.theirs.score;
@@ -300,6 +300,7 @@ function createService(seed) {
     S.news = news;
     S.teams.forEach(t => updateDailyCondition(t.roster, rng));
     S.day++;
+    if (S.day < S.length && S.day % 4 === 0 && S.offerDay !== S.day) genOffers();
     if (S.day >= S.length) {
       S.done = true;
       S.champion = standings()[0].name;
@@ -363,10 +364,10 @@ function createService(seed) {
     const top = (arr, key, desc = true, n = 5) => [...arr].sort((a, b) => desc ? b[key] - a[key] : a[key] - b[key]).slice(0, n);
     return {
       leaders: {
-        avg: top(qualBat, 'avg'), hr: top(bats, 'hr'), rbi: top(bats, 'rbi'), ops: top(qualBat, 'ops'),
+        avg: top(qualBat, 'avg'), hr: top(bats, 'hr'), rbi: top(bats, 'rbi'), ops: top(qualBat, 'ops'), sb: top(bats, 'sb'),
         era: top(qualPit.filter(p => p.era !== null), 'era', false), k: top(pits, 'k'), w: top(pits, 'w'),
       },
-      myBatters: hitters(myTeam()).map(p => batRow(p) || { id: p.id, name: p.name, pos: p.pos, g: 0, pa: 0, ab: 0, h: 0, hr: 0, rbi: 0, bb: 0, k: 0, r: 0, d2: 0, d3: 0, avg: 0, ops: 0 }),
+      myBatters: hitters(myTeam()).map(p => batRow(p) || { id: p.id, name: p.name, pos: p.pos, g: 0, pa: 0, ab: 0, h: 0, hr: 0, rbi: 0, bb: 0, k: 0, r: 0, d2: 0, d3: 0, sb: 0, cs: 0, avg: 0, ops: 0 }),
       myPitchers: myTeam().roster.filter(p => p.isPitcher).map(p => pitRow(p) || { id: p.id, name: p.name, pos: p.pos, g: 0, gs: 0, ip: '0.0', era: null, k: 0, w: 0, l: 0, bb: 0, h: 0 }),
     };
   }
@@ -382,6 +383,7 @@ function createService(seed) {
       today: oppId === null ? null : { opponent: team(oppId).name, oppStrength: teamStrength(team(oppId)) },
       myStrength: teamStrength(myTeam()),
       standings: standings(), recent: S.recent.slice(-5).reverse(), news: S.news,
+      offerCount: (S.offers || []).length,
       voices: (S.voices || []).slice(-4).reverse(), draftOpen: !!S.draft && S.draft.pick < S.draft.order.length * S.draft.rounds,
       devReport: S.devReport || null,
     };
@@ -840,6 +842,55 @@ function createService(seed) {
     }];
   }
 
+  // ── AI 트레이드 제안 ──
+  // AI 구단이 우리 핵심 선수(젊거나 잠재력 큰 선수)를 원하고, 대신 그보다 능력치가 높은 노장(즉시전력)을 내놓음.
+  // 제안은 언제나 평가에서 AI 가 수락할 만한(우리에게 손해일 수 있는) 조건이라, 받아들일지는 감독이 판단
+  function genOffers() {
+    const me = myTeam();
+    const targets = [...me.roster].sort((a, b) => tradeValue(b) - tradeValue(a)).slice(0, 8);
+    const teams = S.teams.filter(t => !t.user).map(t => [rng.random(), t]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+    const offers = [], usedGive = new Set();
+    for (const t of teams) {
+      if (offers.length >= 3) break;
+      const tgt = targets[rng.randrange(targets.length)];
+      if (usedGive.has(tgt.id)) continue;
+      const tv = tradeValue(tgt);
+      const cand = t.roster.filter(p => tradeValue(p) * 1.05 <= tv && pk(p) !== pk(tgt) && p.isPitcher === tgt.isPitcher)
+        .sort((a, b) => b.ovr - a.ovr)[0];
+      if (!cand || cand.ovr < tgt.ovr - 4) continue;
+      const ev = tradeEval({ team: t.id, give: [tgt.id], get: [cand.id] });
+      if (ev.verdict !== 'accept') continue;
+      usedGive.add(tgt.id);
+      offers.push({ id: newId(), team: t.id, give: [tgt.id], get: [cand.id], day: S.day });
+    }
+    S.offers = offers;
+    S.offerDay = S.day;
+    if (offers.length) voice(me.roster[0], `감독님, 다른 구단에서 트레이드 제안이 ${offers.length}건 들어왔다고 합니다. 운영 탭에서 확인해 보세요.`, 'neutral');
+  }
+  function offersView() {
+    const me = myTeam();
+    const row = p => ({ ...p.toDict(), value: tradeValue(p) });
+    const live = (S.offers || []).filter(o => {
+      const t = team(o.team);
+      return t && o.give.every(id => me.roster.some(p => p.id === id)) && o.get.every(id => t.roster.some(p => p.id === id))
+        && tradeEval({ team: o.team, give: o.give, get: o.get }).verdict === 'accept';
+    });
+    S.offers = live;
+    return live.map(o => {
+      const t = team(o.team), give = me.roster.find(p => p.id === o.give[0]), get = t.roster.find(p => p.id === o.get[0]);
+      return { id: o.id, team: t.name, give: row(give), get: row(get),
+        message: `${t.name}: ${give.name} 선수를 데려오고 싶습니다. 대신 ${get.name}(${get.age}세, OVR ${get.ovr})을 드리겠습니다.` };
+    });
+  }
+  function offerAct(body, accept) {
+    const o = (S.offers || []).find(x => x.id === body.id);
+    if (!o) return [404, { error: '이미 사라진 제안입니다.' }];
+    if (!accept) { S.offers = S.offers.filter(x => x !== o); dirty = true; return [200, { declined: true }]; }
+    const r = tradePropose({ team: o.team, give: o.give, get: o.get });
+    if (r[0] === 200) S.offers = S.offers.filter(x => x !== o);
+    return r;
+  }
+
   // ── 신인 드래프트 (시즌 종료 후) ──
   function makeProspect(i) {
     const lg = S.league === 'WORLD' ? ['KBO', 'NPB', 'MLB'][rng.randrange(3)] : S.league;
@@ -970,6 +1021,7 @@ function createService(seed) {
       results: res.slice(0, Math.min(60, Number(body.limit) || 40)).map(p => ({
         id: p.id, name: p.name, pos: p.pos, league: p.league, ovr: p.ovr, potential: p.potential,
         team: p.team, first: p.first, last: p.last, owner: ownerOf(p.id), cost: signCost(p), country: p.country,
+        sub: p.sub || null,
       })),
     }];
   }
@@ -1012,7 +1064,7 @@ function createService(seed) {
     const pl = Object.values(S.players).map(p => [p.id, p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era, p.fatigue, p.first || 0, p.last || 0, p.most || '',
       p.morale === undefined ? null : p.morale, p.birthYear || 0, p.rookie ? 1 : 0, p.ageSet ? 1 : 0]);
     const teams = S.teams.map(t => ({ id: t.id, name: t.name, user: t.user, group: t.group, league: t.league, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak, roster: t.roster.map(p => p.id) }));
-    return { version: 4, career: S.career || null, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null,
+    return { version: 4, career: S.career || null, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null, offers: S.offers || [], offerDay: S.offerDay || 0,
       devReport: S.devReport || null, mode: S.mode, year: S.year, length: S.length, difficulty: S.difficulty, day: S.day, tp: S.tp, done: S.done, champion: S.champion,
       recent: S.recent, news: S.news, schedule: S.schedule, stats: S.stats, players: pl, teams };
   }
@@ -1029,11 +1081,11 @@ function createService(seed) {
     // 동일인 키·국가는 선수 DB 에서 다시 붙임
     Object.values(players).forEach(p => {
       const b = DB_BY_ID.get(p.id);
-      if (b) { p.person = b.person; p.country = b.country; if (!p.birthYear) p.birthYear = b.birthYear; } else p.person = p.id;
+      if (b) { p.person = b.person; p.country = b.country; p.sub = b.sub; if (!p.birthYear) p.birthYear = b.birthYear; } else { p.person = p.id; p.sub = null; }
     });
     const teams = o.teams.map(t => ({ group: '', league: o.league || 'KBO', ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
     S = { version: 4, league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
-      voices: o.voices || [], trades: o.trades || [], draft: o.draft || null, devReport: o.devReport || null, career: o.career || null,
+      voices: o.voices || [], trades: o.trades || [], draft: o.draft || null, devReport: o.devReport || null, career: o.career || null, offers: o.offers || [], offerDay: o.offerDay || 0,
       mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
       recent: o.recent || [], news: o.news || [], schedule: o.schedule, stats: o.stats || {}, players, teams };
     games.clear();
@@ -1061,6 +1113,9 @@ function createService(seed) {
     else if (key === 'POST api/trade/roster') res = tradeRoster(body);
     else if (key === 'POST api/trade/evaluate') res = tradeView(body);
     else if (key === 'POST api/trade/propose') res = tradePropose(body);
+    else if (key === 'GET api/trade/offers') res = [200, { offers: offersView() }];
+    else if (key === 'POST api/trade/accept') res = offerAct(body, true);
+    else if (key === 'POST api/trade/decline') res = offerAct(body, false);
     else if (key === 'GET api/draft') res = [200, draftView()];
     else if (key === 'POST api/draft/pick') res = draftPick(body);
     else if (key === 'GET api/locker') res = [200, { voices: (S.voices || []).slice().reverse(),

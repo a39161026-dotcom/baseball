@@ -438,6 +438,53 @@ test('커리어 단계별 상대 전력이 점점 강해짐', () => {
   for (let i = 1; i < levels.length; i++) assert.ok(levels[i] > levels[i - 1], JSON.stringify(levels.map(x => x.toFixed(1))));
 });
 
+test('AI 트레이드 제안: 4일마다 들어오고 수락하면 성사, 선수단이 바뀌면 사라짐', () => {
+  const svc = createService(81);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 36 });
+  assert.strictEqual(svc.dispatch('GET', '/api/trade/offers').payload.offers.length, 0, '시작 직후에는 없음');
+  svc.dispatch('POST', '/api/season/quick', { days: 4 });
+  const { offers } = svc.dispatch('GET', '/api/trade/offers').payload;
+  assert.ok(offers.length >= 1, '4일 뒤 제안 도착');
+  assert.ok(svc.dispatch('GET', '/api/season').payload.offerCount >= 1);
+  const o = offers[0], me = svc.state.teams[0];
+  assert.ok(me.roster.some(p => p.id === o.give.id) && !me.roster.some(p => p.id === o.get.id));
+  assert.ok(o.get.value * 1.05 <= o.give.value, 'AI 에게 유리한 조건');
+  assert.ok(/드리겠습니다/.test(o.message));
+  // 수락
+  const r = svc.dispatch('POST', '/api/trade/accept', { id: o.id });
+  assert.strictEqual(r.status, 200, JSON.stringify(r.payload));
+  assert.ok(me.roster.some(p => p.id === o.get.id) && !me.roster.some(p => p.id === o.give.id));
+  assert.ok(!svc.dispatch('GET', '/api/trade/offers').payload.offers.some(x => x.id === o.id));
+  // 거절하면 사라짐, 선수가 사라진 제안도 정리
+  if (offers[1]) {
+    assert.strictEqual(svc.dispatch('POST', '/api/trade/decline', { id: offers[1].id }).status, 200);
+    assert.ok(!svc.dispatch('GET', '/api/trade/offers').payload.offers.some(x => x.id === offers[1].id));
+  }
+  if (offers[2]) {
+    svc.dispatch('POST', '/api/release', { id: offers[2].give.id });
+    assert.ok(!svc.dispatch('GET', '/api/trade/offers').payload.offers.some(x => x.id === offers[2].id), '내보낼 선수가 없으면 제안 소멸');
+  }
+  // 저장/불러오기
+  svc.dispatch('POST', '/api/season/quick', { days: 4 });
+  const saved = JSON.parse(JSON.stringify(svc.exportState()));
+  const svc2 = createService(1);
+  assert.ok(svc2.importState(saved));
+  assert.strictEqual(svc2.dispatch('GET', '/api/trade/offers').payload.offers.length, svc.dispatch('GET', '/api/trade/offers').payload.offers.length);
+});
+
+test('세부 능력치: 데이터 반영과 엔진 효과 (컨택형 > 균형형 > 파워형 타율, 주루 높을수록 도루 성공)', () => {
+  const svc = createService(82);
+  const ich = svc.dispatch('POST', '/api/scout/search', { q: 'ichiro suzuki', league: 'MLB' }).payload.results[0];
+  assert.ok(ich.sub && ich.sub[0] >= 90 && ich.sub[3] >= 90 && ich.sub[1] <= 50, '이치로: 컨택·주루 높고 파워 낮음 ' + ich.sub);
+  const ryan = svc.dispatch('POST', '/api/scout/search', { q: 'nolan ryan' }).payload.results[0];
+  assert.ok(ryan.sub[0] >= 90 && ryan.sub[1] <= 40, '놀란 라이언: 탈삼진 높고 제구 낮음 ' + ryan.sub);
+  const { run } = require('./measure');
+  const bal = run([50, 50, 50, 50], [50, 50], 250), con = run([85, 25, 50, 50], [50, 50], 250), pow = run([35, 95, 50, 50], [50, 50], 250);
+  assert.ok(Number(con.AVG) > Number(bal.AVG) + 0.03, `컨택형 타율 ${con.AVG} vs ${bal.AVG}`);
+  assert.ok(Number(pow.AVG) < Number(bal.AVG), `파워형 타율 ${pow.AVG}`);
+  assert.ok(Number(pow.HR9) > Number(bal.HR9), `파워형 홈런 ${pow.HR9} vs ${bal.HR9}`);
+});
+
 test('밸런스: 팀당 득점이 현실 범위', () => {
   let rm = 0, ro = 0;
   const N = 600;

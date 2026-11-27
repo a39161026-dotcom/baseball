@@ -262,6 +262,68 @@ def rate_pitchers(seasons, starters):
     return out
 
 
+def _zstats(ms, keys):
+    out = {}
+    for k in keys:
+        vals = [m[k] for m in ms]
+        mu = sum(vals) / len(vals)
+        sd = math.sqrt(sum((x - mu) ** 2 for x in vals) / len(vals)) or 1e-9
+        out[k] = (mu, sd)
+    return out
+
+
+def _components(rows, keys, flip, min_n=25):
+    """rows: [(pid, year, weight, {key: value})] → pid -> [rating per key]
+    리그-시즌 분포(표본이 적으면 리그 전체 분포) 대비 z점수의 전성기 3시즌 + 통산 가중 평균 → 50 + 20z"""
+    by = defaultdict(list)
+    for pid, y, w, m in rows:
+        by[y].append(m)
+    pooled = _zstats([m for v in by.values() for m in v], keys) if rows else {}
+    st = {y: (_zstats(v, keys) if len(v) >= min_n else pooled) for y, v in by.items()}
+    per = defaultdict(list)
+    for pid, y, w, m in rows:
+        per[pid].append((w, {k: (m[k] - st[y][k][0]) / st[y][k][1] for k in keys}))
+    out = {}
+    for pid, ss in per.items():
+        total = sum(w for w, _ in ss)
+        res = []
+        for k in keys:
+            zs = sorted((z[k] for _, z in ss), reverse=True)[:3]
+            peak = sum(zs) / len(zs)
+            career = sum(w * z[k] for w, z in ss) / total
+            z = (0.6 * peak + 0.4 * career) * min(1.0, math.sqrt(total / 1200))
+            if k in flip:
+                z = -z
+            res.append(max(20, min(99, round(50 + 20 * z))))
+        out[pid] = res
+    return out
+
+
+def bat_components(seasons):
+    """타자 세부 능력치 [컨택, 파워, 선구, 주루] — 타율 / 순장타율(ISO) / 볼넷률 / (도루-2*도루실패+3루타)율"""
+    rows = []
+    for (pid, y), s in seasons.items():
+        pa, _, _ = season_bat_derived(s)
+        ab = s["AB"]
+        if pa < 150 or not ab:
+            continue
+        h = s["H"]
+        tb = h + s["2B"] + 2 * s["3B"] + 3 * s["HR"]
+        rows.append((pid, y, pa, {"con": h / ab, "pow": (tb - h) / ab, "eye": s["BB"] / pa,
+                                  "spd": (s.get("SB", 0) - 2 * s.get("CS", 0) + s["3B"]) / pa}))
+    return _components(rows, ("con", "pow", "eye", "spd"), flip=())
+
+
+def pit_components(seasons):
+    """투수 세부 능력치 [탈삼진, 제구] — 삼진률(높을수록 좋음) / 볼넷률(낮을수록 좋음)"""
+    rows = []
+    for (pid, y), s in seasons.items():
+        if s["IP"] < 40 or s["BF"] <= 0:
+            continue
+        rows.append((pid, y, s["IP"], {"k": s["SO"] / s["BF"], "ctl": s["BB"] / s["BF"]}))
+    return _components(rows, ("k", "ctl"), flip=("ctl",))
+
+
 def main_pos(counter, fallback):
     if not counter:
         return fallback
@@ -283,9 +345,11 @@ def build_kbo():
     people = {r["PlayerID"]: r for r in load("kbo_people")}
     bat_rows = load("kbo_bat")
     bat, bat_team = agg_batting(bat_rows, "PlayerID", "Year",
-                                {"PA": "PA", "AB": "AB", "H": "H", "2B": "2B", "3B": "3B", "HR": "HR", "BB": "BB", "G": "G"})
+                                {"PA": "PA", "AB": "AB", "H": "H", "2B": "2B", "3B": "3B", "HR": "HR", "BB": "BB", "G": "G",
+                                 "SB": "SB", "CS": "CS", "SO": "SO"})
     lg = league_bat_avgs(bat)
     bat_r = rate_batters(bat, lg)
+    bat_c = bat_components(bat)
 
     pit = defaultdict(lambda: defaultdict(float))
     pit_team = {}
@@ -297,6 +361,9 @@ def build_kbo():
         s["IP"] += kbo_ip(r.get("IP"))
         s["ER"] += num(r.get("ER"))
         s["G"] += num(r.get("G"))
+        s["SO"] += num(r.get("SO"))
+        s["BB"] += num(r.get("BB"))
+        s["BF"] += num(r.get("TBF"))
         pit_team[(pid, y)] = r.get("Team")
     ipg = defaultdict(lambda: [0.0, 0.0])
     for (pid, y), s in pit.items():
@@ -304,6 +371,7 @@ def build_kbo():
         ipg[pid][1] += s["G"]
     starters = {pid: (ip / g >= 3.5 if g else False) for pid, (ip, g) in ipg.items()}
     pit_r = rate_pitchers(pit, starters)
+    pit_c = pit_components(pit)
 
     fld = defaultdict(lambda: defaultdict(float))
     for r in load("kbo_fld"):
@@ -318,7 +386,7 @@ def build_kbo():
                     team_name=lambda code: KBO_FRANCHISE.get(code) or KBO_TEAM_KOR.get(code) or code,
                     franchise=lambda code: KBO_FRANCHISE.get(code),
                     roman=lambda p: (p.get("LastNameEng") or "", p.get("FirstNameEng") or ""),
-                    country=lambda p: country_of(p.get("Nationality")))
+                    country=lambda p: country_of(p.get("Nationality")), bat_c=bat_c, pit_c=pit_c)
 
 
 def build_npb():
@@ -326,9 +394,10 @@ def build_npb():
     rows = load("npb_bat")
     bat, bat_team = agg_batting(rows, "playerID", "yearID",
                                 {"PA": "PA", "AB": "AB", "H": "H", "2B": "2B", "3B": "3B", "HR": "HR", "BB": "BB",
-                                 "HBP": "HBP", "SF": "SF", "SH": "SH", "G": "G"})
+                                 "HBP": "HBP", "SF": "SF", "SH": "SH", "G": "G", "SB": "SB", "CS": "CS", "SO": "SO"})
     lg = league_bat_avgs(bat)
     bat_r = rate_batters(bat, lg)
+    bat_c = bat_components(bat)
     fld = defaultdict(lambda: defaultdict(float))
     for r in rows:
         p = norm_pos(r.get("POS"))
@@ -343,6 +412,9 @@ def build_npb():
         s["ER"] += num(r.get("ER"))
         s["G"] += num(r.get("G"))
         s["GS"] += num(r.get("GS"))
+        s["SO"] += num(r.get("SO"))
+        s["BB"] += num(r.get("BB"))
+        s["BF"] += num(r.get("BFP"))
         pit_team[(pid, y)] = r.get("teamID")
     gs = defaultdict(lambda: [0.0, 0.0])
     for (pid, y), s in pit.items():
@@ -350,6 +422,7 @@ def build_npb():
         gs[pid][1] += s["G"]
     starters = {pid: (a / b >= 0.5 if b else False) for pid, (a, b) in gs.items()}
     pit_r = rate_pitchers(pit, starters)
+    pit_c = pit_components(pit)
     return assemble("N", "NPB", people, bat_r, pit_r, starters, fld, bat_team, pit_team,
                     name=lambda p: (p.get("nameGiven") or f"{p.get('nameFirst', '')} {p.get('nameLast', '')}").strip(),
                     birth=lambda p: int(num(p.get("birthYear"))) or None,
@@ -357,16 +430,17 @@ def build_npb():
                     team_name=lambda code: NPB_NAME.get(NPB_FRANCHISE.get(code, ""), code),
                     franchise=lambda code: NPB_NAME.get(NPB_FRANCHISE.get(code, "")),
                     roman=lambda p: (p.get("nameLast") or "", p.get("nameFirst") or ""),
-                    country=lambda p: country_of(p.get("birthPlace")))
+                    country=lambda p: country_of(p.get("birthPlace")), bat_c=bat_c, pit_c=pit_c)
 
 
 def build_mlb():
     people = {r["playerID"]: r for r in load("mlb_people")}
     bat, bat_team = agg_batting(load("mlb_bat"), "playerID", "yearID",
                                 {"AB": "AB", "H": "H", "2B": "2B", "3B": "3B", "HR": "HR", "BB": "BB",
-                                 "HBP": "HBP", "SF": "SF", "SH": "SH", "G": "G"})
+                                 "HBP": "HBP", "SF": "SF", "SH": "SH", "G": "G", "SB": "SB", "CS": "CS", "SO": "SO"})
     lg = league_bat_avgs(bat)
     bat_r = rate_batters(bat, lg)
+    bat_c = bat_components(bat)
     pit = defaultdict(lambda: defaultdict(float))
     pit_team = {}
     for r in load("mlb_pit"):
@@ -376,6 +450,9 @@ def build_mlb():
         s["ER"] += num(r.get("ER"))
         s["G"] += num(r.get("G"))
         s["GS"] += num(r.get("GS"))
+        s["SO"] += num(r.get("SO"))
+        s["BB"] += num(r.get("BB"))
+        s["BF"] += num(r.get("BFP"))
         pit_team[(pid, y)] = r.get("teamID")
     gs = defaultdict(lambda: [0.0, 0.0])
     for (pid, y), s in pit.items():
@@ -383,6 +460,7 @@ def build_mlb():
         gs[pid][1] += s["G"]
     starters = {pid: (a / b >= 0.5 if b else False) for pid, (a, b) in gs.items()}
     pit_r = rate_pitchers(pit, starters)
+    pit_c = pit_components(pit)
     fld = defaultdict(lambda: defaultdict(float))
     for r in load("mlb_fld"):
         p = norm_pos(r.get("POS"))
@@ -395,11 +473,12 @@ def build_mlb():
                     team_name=lambda code: MLB_NAME.get(MLB_FRANCHISE.get(code, ""), code),
                     franchise=lambda code: MLB_NAME.get(MLB_FRANCHISE.get(code, "")),
                     roman=lambda p: (p.get("nameLast") or "", p.get("nameFirst") or ""),
-                    country=lambda p: country_of(p.get("birthCountry")))
+                    country=lambda p: country_of(p.get("birthCountry")), bat_c=bat_c, pit_c=pit_c)
 
 
 def assemble(prefix, league, people, bat_r, pit_r, starters, fld, bat_team, pit_team, name, birth, fallback_pos, team_name,
-             franchise=lambda code: code, roman=lambda p: ("", ""), country=lambda p: ""):
+             franchise=lambda code: code, roman=lambda p: ("", ""), country=lambda p: "", bat_c=None, pit_c=None):
+    bat_c, pit_c = bat_c or {}, pit_c or {}
     out = []
     for pid in set(bat_r) | set(pit_r):
         p = people.get(pid, {})
@@ -433,8 +512,9 @@ def assemble(prefix, league, people, bat_r, pit_r, starters, fld, bat_team, pit_
         if r["last"] >= 2024 and by and r["last"] - by <= 25:      # 젊은 현역: 성장 여지
             pot = min(97, ovr + 2 * (26 - (r["last"] - by)))
         rl, rf = roman(p) if p else ("", "")
+        sub = (pit_c.get(pid) if is_pitcher else bat_c.get(pid)) or []
         out.append([prefix + pid, nm, pos, league, by or 0, ovr, pot, last_team, most, r["first"], r["last"], r["peak"],
-                    country(p) if p else "", rl, rf])
+                    country(p) if p else "", rl, rf, sub])
     return out
 
 
@@ -532,7 +612,7 @@ def main():
     rows.sort(key=lambda r: (r[3], -r[5], r[1]))
     header = ("// 선수 DB — tools/build_players.py 로 생성 (직접 수정하지 마세요)\n"
               "// 출처: KBO 공식 기록, NPB 공식/npbstats, MLB Lahman Database (frankmkpark/mnk_datasets 정리본)\n"
-              "// [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, 최다 소속 구단(계보), 첫 시즌, 마지막 시즌, 전성기 시즌, 국가, 동일인 키]\n")
+              "// [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, 최다 소속 구단(계보), 첫 시즌, 마지막 시즌, 전성기 시즌, 국가, 동일인 키, 세부능력: 타자[컨택,파워,선구,주루] / 투수[탈삼진,제구]]\n")
     body = "const PLAYERS = [\n" + ",\n".join(json.dumps(r, ensure_ascii=False, separators=(",", ":")) for r in rows) + "\n];\n"
     leagues = {
         "KBO": {"name": "KBO 리그", "last": LEAGUE_LAST["KBO"], "groups": ["드림", "나눔"],

@@ -49,7 +49,8 @@ class Player {
     return { id: this.id, name: this.name, pos: this.pos, ovr: this.ovr, effOvr: this.effOvr,
       fatigue: this.fatigue, hp: this.hp, condition: this.condition[0], team: this.team, league: this.league,
       first: this.first || null, last: this.last || null, country: this.country || '',
-      age: this.age, potential: this.potential, morale: this.morale === undefined ? null : this.morale, rookie: !!this.rookie };
+      age: this.age, potential: this.potential, morale: this.morale === undefined ? null : this.morale, rookie: !!this.rookie,
+      sub: this.sub || null };
   }
 }
 
@@ -199,7 +200,7 @@ class GameEngine {
   get oppMult() { return DIFFICULTY[this.difficulty][0]; }
 
   stat(p) {
-    if (!this.bat.has(p.id)) this.bat.set(p.id, { pa: 0, ab: 0, h: 0, d2: 0, d3: 0, hr: 0, rbi: 0, bb: 0, k: 0, r: 0 });
+    if (!this.bat.has(p.id)) this.bat.set(p.id, { pa: 0, ab: 0, h: 0, d2: 0, d3: 0, hr: 0, rbi: 0, bb: 0, k: 0, r: 0, sb: 0, cs: 0 });
     return this.bat.get(p.id);
   }
 
@@ -268,14 +269,14 @@ class GameEngine {
       this.pendingSteal = -1;
       r.add('MANAGER', '🏃 도루 사인!');
       this.attemptSteal(r, off, dfn, frm);
-    } else if (!mineBat) {
+    } else if (!mineBat || this.autoMine) {       // 사용자가 지휘하지 않는 쪽(AI 경기 포함)은 코치가 도루 판단
       const frm = this.aiStealBase();
       if (frm >= 0) this.attemptSteal(r, off, dfn, frm);
     }
     if (gs.outs >= 3) { this.finish(r); return r; }
 
     let bunt;
-    if (mineBat) { bunt = this.pendingBunt; this.pendingBunt = false; }
+    if (mineBat && !this.autoMine) { bunt = this.pendingBunt; this.pendingBunt = false; }
     else bunt = this.atBatFresh && this.aiWantsBunt(off.currentBatter());
     if (bunt) {
       r.add('MANAGER', mineBat ? '🥎 번트 사인 실행!' : C.aiBunt());
@@ -294,7 +295,8 @@ class GameEngine {
     const pOvr = this.pitcherEff(pitcher);
     const call = mineBat ? 'AUTO' : this.pitchCall;
 
-    const pitch = this.throwPitch(bOvr, pOvr, call);
+    const bk = this.batterSkills(batter, bOvr), pks = this.pitcherSkills(pitcher, pOvr);
+    const pitch = this.throwPitch(bk, pks, pOvr, call);
     this.atBatFresh = false;
     line.addPitch(pitcher.pos === 'SP' ? 0.6 : 1.2);
     gs.pitchTotal++;
@@ -311,7 +313,7 @@ class GameEngine {
       if (gs.strikes < 2) gs.strikes++;
       r.add('PITCH', C.foul(this.rng) + this.count());
     } else {
-      this.contact(r, off, dfn, batter, bOvr, pOvr, call);
+      this.contact(r, off, dfn, batter, bk, pOvr, call);
       this.endAtBat(r, off);
     }
     this.finish(r);
@@ -319,6 +321,22 @@ class GameEngine {
   }
 
   count() { return `  [${this.gs.balls}-${this.gs.strikes}]`; }
+
+  // 세부 능력치 반영: 종합 능력치(OVR)에는 이미 컨택·파워·선구가 섞여 있으므로, 선수 본인 평균 대비 편차만 0.5 배로 반영
+  // (스타일만 달라지고 전체 득점 환경은 유지). 세부 능력치가 없으면(신인 등) 종합 능력치 그대로
+  batterSkills(b, ovr) {
+    const s = b.sub;
+    if (!s || s.length < 3) return { ovr, con: ovr, pow: ovr, eye: ovr };
+    const m = (s[0] + s[1] + s[2]) / 3;
+    return { ovr, con: ovr + 0.5 * (s[0] - m), pow: ovr + 0.5 * (s[1] - m), eye: ovr + 0.5 * (s[2] - m) };
+  }
+  pitcherSkills(p, ovr) {
+    const s = p && p.sub;
+    if (!s || s.length < 2) return { ovr, k: ovr, ctl: ovr };
+    const m = (s[0] + s[1]) / 2;
+    return { ovr, k: ovr + 0.5 * (s[0] - m), ctl: ovr + 0.5 * (s[1] - m) };
+  }
+  speedOf(p) { return p && p.sub && p.sub.length === 4 ? p.sub[3] : 50; }
 
   pitcherEff(p) {
     if (!p) return 50;
@@ -330,13 +348,16 @@ class GameEngine {
     return { FASTBALL: [-0.04, -0.02, 0.03], BREAKING: [0.02, 0.08, -0.03], WASTE: [0.10, 0.06, -0.05] }[c] || [0, 0, 0];
   }
 
-  throwPitch(bOvr, pOvr, call) {
-    const sp = (pOvr - 50) / 50, sb = (bOvr - 50) / 50, m = this.callMods(call);
-    const pBall = clamp(0.34 - 0.06 * sp + 0.02 * sb + m[0], 0.15, 0.50);
+  throwPitch(bk, pks, pOvr, call) {
+    // sB/sP: 종합 능력치 기준(전체 환경), 아래 (세부 - 종합) 항: 스타일 편차에만 더 큰 계수
+    const sB = (bk.ovr - 50) / 50, sP = (pks.ovr - 50) / 50;
+    const dK = (pks.k - pks.ovr) / 50, dCtl = (pks.ctl - pks.ovr) / 50, dEye = (bk.eye - bk.ovr) / 50, dCon = (bk.con - bk.ovr) / 50;
+    const m = this.callMods(call);
+    const pBall = clamp(0.34 - 0.06 * sP + 0.02 * sB - 0.14 * dCtl + 0.14 * dEye + m[0], 0.15, 0.55);   // 볼: 투수 제구 vs 타자 선구
     if (this.rng.random() < pBall) return 'BALL';
     const two = this.gs.strikes >= 2 ? 0.10 : 0;
-    let w = clamp(0.28 + 0.10 * sp - 0.07 * sb + m[1] + two, 0.08, 0.50);
-    let f = clamp(0.30 - 0.02 * sb, 0.20, 0.38);
+    let w = clamp(0.28 + 0.10 * sP - 0.07 * sB + 0.14 * dK - 0.10 * dCon + m[1] + two, 0.08, 0.55);   // 헛스윙: 투수 탈삼진 vs 타자 컨택
+    let f = clamp(0.30 - 0.02 * sB, 0.20, 0.38);
     let c = 0.10;
     const tot = w + f + c;
     if (tot > 0.95) { const k = 0.95 / tot; w *= k; f *= k; c *= k; }
@@ -347,9 +368,9 @@ class GameEngine {
     return 'IN_PLAY';
   }
 
-  contact(r, off, dfn, batter, bOvr, pOvr, call) {
-    const sb = (bOvr - 50) / 50, sp = (pOvr - 50) / 50;
-    const hitP = clamp(0.33 + 0.20 * sb - 0.15 * sp + this.callMods(call)[2], 0.12, 0.55);
+  contact(r, off, dfn, batter, bk, pOvr, call) {
+    const sB = (bk.ovr - 50) / 50, dCon = (bk.con - bk.ovr) / 50, dPow = (bk.pow - bk.ovr) / 50, sp = (pOvr - 50) / 50;
+    const hitP = clamp(0.33 + 0.20 * sB + 0.28 * dCon - 0.15 * sp + this.callMods(call)[2], 0.12, 0.58);
     const u = this.rng.random();
     const ct = u < 0.44 ? 'GROUND' : (u < 0.84 ? 'FLY' : 'LINE');
     if (this.rng.random() >= hitP) {
@@ -358,7 +379,7 @@ class GameEngine {
       else { this.addOuts(dfn, 1); const st = this.stat(batter); st.pa++; st.ab++; r.add('OUT', C.lineOut()); }
       return;
     }
-    const hr = clamp(0.18 + 0.14 * sb - 0.05 * sp, 0.05, 0.35);
+    const hr = clamp(0.18 + 0.14 * sB + 0.36 * dPow - 0.05 * sp, 0.04, 0.55);        // 홈런: 타자 파워
     const v = this.rng.random();
     let kind;
     if (ct === 'GROUND') kind = v < 0.92 ? 'SINGLE' : 'DOUBLE';
@@ -371,8 +392,9 @@ class GameEngine {
 
   hit(r, off, dfn, batter, kind) {
     let adv, batterAdv;
-    if (kind === 'SINGLE') { adv = [this.rng.random() < 0.25 ? 2 : 1, this.rng.random() < 0.55 ? 2 : 1, 1]; batterAdv = 1; }
-    else if (kind === 'DOUBLE') { adv = [this.rng.random() < 0.40 ? 3 : 2, 2, 1]; batterAdv = 2; }
+    const rn0 = this.gs.runners, ex = i => (this.speedOf(rn0[i]) - 50) * 0.004;      // 발 빠른 주자는 한 베이스 더
+    if (kind === 'SINGLE') { adv = [this.rng.random() < 0.25 + ex(0) ? 2 : 1, this.rng.random() < 0.55 + ex(1) ? 2 : 1, 1]; batterAdv = 1; }
+    else if (kind === 'DOUBLE') { adv = [this.rng.random() < 0.40 + ex(0) ? 3 : 2, 2, 1]; batterAdv = 2; }
     else if (kind === 'TRIPLE') { adv = [3, 2, 1]; batterAdv = 3; }
     else { adv = [3, 2, 1]; batterAdv = 4; }
     const scorers = this.advance(adv, batter, batterAdv);
@@ -484,10 +506,10 @@ class GameEngine {
     const rn = this.gs.runners, to = frm + 1;
     if (frm < 0 || frm > 1 || !rn[frm] || rn[to]) return;
     const runner = rn[frm];
-    const p = clamp(0.50 + (runner.effOvr - 60) * 0.012, 0.35, 0.90);
+    const p = clamp(0.50 + (runner.effOvr - 60) * 0.006 + (this.speedOf(runner) - 50) * 0.008, 0.30, 0.95);   // 도루: 주력 중심
     rn[frm] = null;
-    if (this.rng.random() < p) { rn[to] = runner; r.add('STEAL', C.stealSafe(runner, to + 1)); }
-    else { this.addOuts(dfn, 1); r.add('STEAL', C.stealOut(runner)); }
+    if (this.rng.random() < p) { rn[to] = runner; this.stat(runner).sb++; r.add('STEAL', C.stealSafe(runner, to + 1)); }
+    else { this.addOuts(dfn, 1); this.stat(runner).cs++; r.add('STEAL', C.stealOut(runner)); }
   }
 
   doBunt(r, off, dfn, batter) {
@@ -597,8 +619,8 @@ class GameEngine {
   aiStealBase() {
     const rn = this.gs.runners;
     if (this.gs.outs >= 2) return -1;
-    if (rn[0] && !rn[1] && rn[0].effOvr >= 60 && this.rng.random() < 0.05) return 0;
-    if (rn[1] && !rn[2] && rn[1].effOvr >= 60 && this.rng.random() < 0.02) return 1;
+    if (rn[0] && !rn[1] && this.speedOf(rn[0]) >= 55 && this.rng.random() < 0.06) return 0;
+    if (rn[1] && !rn[2] && this.speedOf(rn[1]) >= 55 && this.rng.random() < 0.025) return 1;
     return -1;
   }
 
@@ -674,17 +696,18 @@ const OPP_POS = ['SP', 'RP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF'
 
 // players.js 행: [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, 최다 소속(계보), 첫 시즌, 마지막 시즌, 전성기, 국가, 동일인 키]
 function playerFromRow(r) {
-  const [id, name, pos, league, by, ovr, pot, last, most, first, lastY, peak, country, person] = r;
+  const [id, name, pos, league, by, ovr, pot, last, most, first, lastY, peak, country, person, sub] = r;
   const p = new Player(name, pos, league, by ? peak - by : 28, ovr, pot, 0, 1, last, peak);
   p.id = id; p.most = most; p.first = first; p.last = lastY;
   p.country = country || ''; p.person = person || id;   // 리그가 달라도 같은 사람이면 같은 person
+  p.sub = sub && sub.length ? sub : null;                 // 타자 [컨택,파워,선구,주루] / 투수 [탈삼진,제구]
   p.birthYear = by || 0;
   return p;
 }
 // 같은 선수를 새 객체로 복사 (국가대표·올스타처럼 소속팀 피로와 분리할 때)
 function clonePlayer(p) {
   const c = new Player(p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era);
-  Object.assign(c, { id: p.id, most: p.most, first: p.first, last: p.last, country: p.country, person: p.person, birthYear: p.birthYear });
+  Object.assign(c, { id: p.id, most: p.most, first: p.first, last: p.last, country: p.country, person: p.person, birthYear: p.birthYear, sub: p.sub });
   return c;
 }
 const buildAllPlayers = () => PLAYERS.map(playerFromRow);
