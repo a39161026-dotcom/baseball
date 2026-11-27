@@ -4,8 +4,12 @@
 // 구단 로스터 구성: 선발 5 + 불펜 4 + 포수 2 + 내야 4 + 외야 4 + 지명 1 = 20명
 const TEAM_POS = ['SP', 'SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'C', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'OF', 'DH'];
 const ROSTER_MAX = 28;
-const CURRENT_YEAR = 2025;      // 데이터 마지막 시즌
 const MY_TEAM = '나의 팀';
+const LEAGUE_KEYS = ['KBO', 'NPB', 'MLB', 'WORLD'];
+const LEAGUE_LABEL = { KBO: 'KBO', NPB: 'NPB', MLB: 'MLB', WORLD: '월드' };
+// 국가대표 대회 (WBC 방식): 8개국, 2개 조
+const INTL_GROUPS = { A: ['KOR', 'JPN', 'CUB', 'MEX'], B: ['USA', 'DOM', 'VEN', 'PUR'] };
+const pk = p => p.person || p.id;           // 동일인 키
 
 function createService(seed) {
   const rng = makeRng(seed);
@@ -17,62 +21,88 @@ function createService(seed) {
   const DB = buildAllPlayers();                 // KBO·NPB·MLB 실존 선수 전체
   const DB_BY_ID = new Map(DB.map(p => [p.id, p]));
 
-  // 후보(OVR 내림차순)에서 포지션 틀에 맞춰 로스터를 채움. 모자라면 비슷한 역할로 보충
-  function pickRoster(cands, used) {
-    const sorted = [...cands].sort((a, b) => b.ovr - a.ovr);
+  // 후보에서 포지션 틀에 맞춰 로스터를 채움. 모자라면 비슷한 역할로 보충.
+  // used 는 동일인 키(person) 집합 — 같은 사람이 두 팀(또는 한 팀에 두 번) 들어가지 않게 함
+  // score 를 주면 그 점수 순, 없으면 OVR 순
+  function pickRoster(cands, used, score) {
+    const val = score || (x => x.ovr);
+    const sorted = [...cands].sort((a, b) => val(b) - val(a));
     const roster = [];
-    const take = p => { used.add(p.id); roster.push(p); };
+    const free = x => !used.has(pk(x));
+    const take = p => { used.add(pk(p)); roster.push(p); };
     TEAM_POS.forEach(pos => {
-      let p = sorted.find(x => !used.has(x.id) && x.pos === pos);
-      if (!p && (pos === 'SP' || pos === 'RP')) p = sorted.find(x => !used.has(x.id) && x.isPitcher);
-      if (!p && pos === 'OF') p = sorted.find(x => !used.has(x.id) && !x.isPitcher);
-      if (!p && pos !== 'SP' && pos !== 'RP') p = sorted.find(x => !used.has(x.id) && !x.isPitcher);
+      let p = sorted.find(x => free(x) && x.pos === pos);
+      if (!p && (pos === 'SP' || pos === 'RP')) p = sorted.find(x => free(x) && x.isPitcher);
+      if (!p && pos !== 'SP' && pos !== 'RP') p = sorted.find(x => free(x) && !x.isPitcher);
       if (p) take(p);
     });
     return roster;
   }
 
+  const avgOvr = r => r.reduce((a, p) => a + p.ovr, 0) / Math.max(1, r.length);
+
+  // 리그별 상대 구단 구성
+  function buildLeagueTeams(league, mode, used) {
+    const fromLeague = lg => LEAGUES[lg].teams.map(t => {
+      const cands = DB.filter(p => p.league === lg &&
+        (mode === 'legend' ? p.most === t.name : (p.team === t.name && p.last >= LEAGUES[lg].last)));
+      return { name: t.name, group: t.group, league: lg, cands };
+    });
+    let defs;
+    if (league === 'WORLD') {
+      // 세 리그 강팀 혼합: 각 리그 전력 상위 (KBO 3, NPB 4, MLB 4)
+      const strongest = (lg, n) => fromLeague(lg)
+        .map(d => ({ ...d, power: avgOvr([...d.cands].sort((a, b) => b.ovr - a.ovr).slice(0, 20)) }))
+        .sort((a, b) => b.power - a.power).slice(0, n);
+      defs = [...strongest('KBO', 3), ...strongest('NPB', 4), ...strongest('MLB', 4)]
+        .map(d => ({ ...d, group: d.league === 'MLB' ? '아메리카' : '아시아' }));
+    } else {
+      defs = fromLeague(league).slice(0, LEAGUES[league].teams.length - 1);   // 한 자리는 우리 팀
+    }
+    return defs.map((d, i) => ({ id: i + 1, name: d.name, group: d.group, league: d.league, user: false, roster: pickRoster(d.cands, used) }));
+  }
+
   // ── 시즌 생성 ──
-  // mode: 'current' = 2025 실제 소속 / 'legend' = 역대 최다 소속 구단
+  // league: KBO | NPB | MLB | WORLD
+  // mode: 'current' = 실제 마지막 시즌 소속 / 'legend' = 역대 최다 소속 구단(계보)
   // level: 'weak' | 'mid' | 'strong' — 상대 구단 평균 전력을 기준으로 우리 팀 강도를 정함
-  function newSeason({ length = 36, level = 'mid', difficulty = 'NORMAL', keep = false, mode = 'current' } = {}) {
+  function newSeason({ length = 36, level = 'mid', difficulty = 'NORMAL', keep = false, mode = 'current', league = 'KBO' } = {}) {
     let teams;
     if (keep && S) {
       teams = S.teams;                       // 다음 시즌: 선수·능력치 유지, 기록 초기화
       teams.forEach(t => { t.w = 0; t.l = 0; t.rs = 0; t.ra = 0; t.streak = ''; });
       teams.forEach(t => t.roster.forEach(p => { p.age++; p.setFatigue(0); }));
       mode = S.mode || mode;
+      league = S.league || league;
     } else {
       DB.forEach(p => { p.setFatigue(0); });
       const used = new Set();
-      const aiNames = KBO_TEAMS.slice(0, 9);
-      const ai = aiNames.map((name, i) => {
-        const cands = DB.filter(p => p.league === 'KBO' &&
-          (mode === 'legend' ? p.most === name : (p.team === name && p.last >= CURRENT_YEAR)));
-        return { id: i + 1, name, user: false, roster: pickRoster(cands, used) };
-      });
+      const ai = buildLeagueTeams(league, mode, used);
       // 우리 팀: 나머지 선수(3개 리그 전체) 중, 상대 구단 평균 대비 강도 범위에서 무작위 구성
-      const aiAvg = ai.reduce((a, t) => a + t.roster.reduce((x, p) => x + p.ovr, 0) / t.roster.length, 0) / ai.length;
+      const aiAvg = ai.reduce((a, t) => a + avgOvr(t.roster), 0) / ai.length;
       const [lo, hi] = { weak: [-9, -2], mid: [-3, 4], strong: [4, 11] }[level] || [-3, 4];
-      const free = DB.filter(p => !used.has(p.id));
       const mine = [];
       [...TEAM_POS, 'SP', 'RP', 'OF', 'C'].forEach(pos => {
-        const fits = x => !used.has(x.id) && x.ovr >= aiAvg + lo && x.ovr <= aiAvg + hi;
-        let c = free.filter(x => fits(x) && x.pos === pos);
-        if (!c.length) c = free.filter(x => fits(x) && x.isPitcher === (pos === 'SP' || pos === 'RP'));
+        const fits = x => !used.has(pk(x)) && x.ovr >= aiAvg + lo && x.ovr <= aiAvg + hi;
+        let c = DB.filter(x => fits(x) && x.pos === pos);
+        if (!c.length) c = DB.filter(x => fits(x) && x.isPitcher === (pos === 'SP' || pos === 'RP'));
         if (!c.length) return;
         const p = c[rng.randrange(c.length)];
-        used.add(p.id); mine.push(p);
+        used.add(pk(p)); mine.push(p);
       });
-      teams = [{ id: 0, name: MY_TEAM, user: true, roster: mine }, ...ai];
+      // 올스타 소속: 빠진 구단 자리(또는 월드는 아시아)
+      const myGroup = league === 'WORLD' ? '아시아' : LEAGUES[league].teams[LEAGUES[league].teams.length - 1].group;
+      teams = [{ id: 0, name: MY_TEAM, user: true, group: myGroup, league, roster: mine }, ...ai];
       teams.forEach(t => { t.w = 0; t.l = 0; t.rs = 0; t.ra = 0; t.streak = ''; });
     }
     const players = {};
     teams.forEach(t => t.roster.forEach(p => { players[p.id] = p; }));
     S = {
-      version: 2, mode, year: keep && S ? S.year + 1 : 2026, length, difficulty, day: 0,
+      version: 3, league, mode, year: keep && S ? S.year + 1 : 2026, length, difficulty, day: 0,
       teams, players, schedule: makeSchedule(teams.length, length),
       stats: {}, tp: keep && S ? S.tp : 10, recent: [], news: [], done: false, champion: null,
+      allStar: { day: length >= 18 ? Math.floor(length / 2) : -1, done: false, result: null },
+      intl: S && S.intl || null,
     };
     teams.forEach(t => updateDailyCondition(t.roster, rng));
     dirty = true;
@@ -244,7 +274,8 @@ function createService(seed) {
   function seasonView() {
     const oppId = todayMatch();
     return {
-      year: S.year, mode: S.mode, day: S.day, length: S.length, done: S.done, champion: S.champion, tp: S.tp, difficulty: S.difficulty,
+      year: S.year, mode: S.mode, league: S.league, leagueLabel: LEAGUE_LABEL[S.league], day: S.day, length: S.length,
+      allStar: { ...S.allStar, due: allStarDue() }, done: S.done, champion: S.champion, tp: S.tp, difficulty: S.difficulty,
       today: oppId === null ? null : { opponent: team(oppId).name, oppStrength: teamStrength(team(oppId)) },
       myStrength: teamStrength(myTeam()),
       standings: standings(), recent: S.recent.slice(-5).reverse(), news: S.news,
@@ -293,8 +324,13 @@ function createService(seed) {
       bullpen: !gs.top && !gs.done ? mine.bullpen().map(p => pdict(p)) : [],
       pitchCall: e.pitchCall, pitchCalls: Object.entries(PITCH_CALLS).map(([id, label]) => ({ id, label })),
       record: { wins: myTeam().w, losses: myTeam().l }, defending: gs.defense().name,
-      day: S.day, length: S.length,
+      day: S.day, length: S.length, kind: g.kind || 'season', title: g.title || '',
     };
+    if (gs.done && g.kind === 'allstar' && S.allStar.done) d.extra = S.allStar.mvp ? [`MVP: ${S.allStar.mvp}`] : [];
+    if (gs.done && g.kind === 'intl' && S.intl) {
+      const last = S.intl.results[S.intl.results.length - 1];
+      d.extra = (last ? last.games : []).concat(S.intl.champion ? [`🏆 우승: ${COUNTRY_NAME[S.intl.champion]}`] : []);
+    }
     if (gs.done) {
       d.box = { mine: mine.pitcherLines.map(l => pdict(l.pitcher, l)), theirs: theirs.pitcherLines.map(l => pdict(l.pitcher, l)) };
       d.batBox = mine.lineup.map(p => ({ name: p.name, pos: p.pos, ...(e.bat.get(p.id) || { pa: 0, ab: 0, h: 0, hr: 0, rbi: 0, bb: 0, k: 0, r: 0 }) }));
@@ -305,7 +341,28 @@ function createService(seed) {
 
   // ── 요청 처리 ──
   function newGame(body) {
+    const kind = body.kind || 'season';
+    if (kind === 'allstar' || kind === 'intl') {
+      let engine, title;
+      if (kind === 'allstar') {
+        if (!allStarDue()) return [409, { error: '지금은 올스타전이 없습니다.' }];
+        const sq = allStarSquads();
+        engine = buildGame(sq.mine, sq.theirs);
+        title = '⭐ 올스타전';
+      } else {
+        const I = S.intl;
+        const opp = I && I.stage !== 'done' ? intlUserMatch() : null;
+        if (!opp) return [409, { error: '지휘할 국가대표 경기가 없습니다.' }];
+        engine = buildGame(intlTeamObj(I.mine), intlTeamObj(opp));
+        title = `🌏 국가대표 ${intlStageLabel(I)}`;
+      }
+      games.clear();
+      const g = { id: newId() + newId(), engine, finished: false, kind, title };
+      games.set(g.id, g);
+      return [200, { state: stateDict(g), lines: linesOut(engine.drainQueue()) }];
+    }
     if (S.done) return [409, { error: '시즌이 끝났습니다. 새 시즌을 시작하세요.' }];
+    if (allStarDue()) return [409, { error: '올스타전 휴식기입니다. 홈에서 올스타전을 지휘하거나 자동으로 치르세요.' }];
     const m = myTeam(), opp = team(todayMatch());
     let lineup = null;
     if (body.lineup && body.lineup.length) {
@@ -315,7 +372,7 @@ function createService(seed) {
     const starter = body.starter ? m.roster.find(p => p.id === body.starter && p.isPitcher) : null;
     games.clear();                                   // 하루에 진행 중인 경기는 하나
     const engine = buildGame(m, opp, { lineup, starter, difficulty: S.difficulty });
-    const g = { id: newId() + newId(), engine, finished: false };
+    const g = { id: newId() + newId(), engine, finished: false, kind: 'season', title: `${S.day + 1}일차 정규시즌` };
     games.set(g.id, g);
     return [200, { state: stateDict(g), lines: linesOut(engine.drainQueue()) }];
   }
@@ -323,7 +380,9 @@ function createService(seed) {
   function complete(g) {
     if (g.finished) return;
     g.finished = true;
-    finishDay(g.engine);
+    if (g.kind === 'allstar') recordAllStar(g.engine);
+    else if (g.kind === 'intl') intlFinishRound(g.engine);
+    else finishDay(g.engine);
   }
 
   function advance(id, body) {
@@ -366,7 +425,9 @@ function createService(seed) {
   // 내 경기를 자동으로 진행 (여러 날)
   function quick(days) {
     const results = [];
+    let stoppedForAllStar = false;
     for (let i = 0; i < days && !S.done; i++) {
+      if (allStarDue()) { stoppedForAllStar = true; break; }     // 올스타전 앞에서 멈춤
       const e = buildGame(myTeam(), team(todayMatch()), { difficulty: S.difficulty });
       e.autoMine = true;
       e.run(MODE.GAME);
@@ -374,7 +435,151 @@ function createService(seed) {
       finishDay(e);
       results.push(r);
     }
-    return [200, { results, season: seasonView() }];
+    return [200, { results, season: seasonView(), stoppedForAllStar }];
+  }
+
+  // ── 올스타전 ──
+  const allStarDue = () => !!S.allStar && !S.allStar.done && S.allStar.day >= 0 && S.day >= S.allStar.day && !S.done;
+  // 팬 투표 점수: OVR + 이번 시즌 성적 보너스(±6)
+  function fanScore(p) {
+    const st = S.stats[p.id] || {};
+    let v = p.ovr;
+    if (p.isPitcher && st.pit && st.pit.outs >= 9) v += clamp((4.0 - st.pit.r * 27 / st.pit.outs) * 2, -6, 6);
+    if (!p.isPitcher && st.bat && st.bat.pa >= 20) {
+      const b = st.bat;
+      const ops = (b.h + b.bb) / b.pa + (b.h + b.d2 + 2 * b.d3 + 3 * b.hr) / Math.max(1, b.ab);
+      v += clamp((ops - 0.7) * 20, -6, 6);
+    }
+    return v;
+  }
+  function allStarSquads() {
+    const myG = myTeam().group;
+    const other = S.teams.map(t => t.group).find(g => g !== myG) || myG;
+    const used = new Set();
+    const squad = g => pickRoster(S.teams.filter(t => t.group === g).flatMap(t => t.roster), used, fanScore).map(clonePlayer);
+    return { mine: { name: `${myG} 올스타`, roster: squad(myG) }, theirs: { name: `${other} 올스타`, roster: squad(other) } };
+  }
+  function recordAllStar(e) {
+    const gs = e.gs, win = gs.mine.score > gs.theirs.score;
+    const side = win ? gs.mine : gs.theirs;
+    const mvp = [...side.lineup].sort((a, b) => {
+      const s = p => { const x = e.bat.get(p.id) || {}; return (x.hr || 0) * 4 + (x.h || 0) * 2 + (x.rbi || 0) * 2 + (x.r || 0); };
+      return s(b) - s(a);
+    })[0];
+    S.allStar = { ...S.allStar, done: true, result: `${gs.mine.name} ${gs.mine.score} : ${gs.theirs.score} ${gs.theirs.name}`, mvp: mvp ? mvp.name : null, win };
+    if (win) S.tp += 3;
+    dirty = true;
+  }
+  function autoAllStar() {
+    const sq = allStarSquads();
+    const e = buildGame(sq.mine, sq.theirs);
+    e.autoMine = true;
+    e.run(MODE.GAME);
+    recordAllStar(e);
+  }
+
+  // ── 국가대표 대회 (조별리그 → 4강 → 결승) ──
+  const RR = [[[0, 1], [2, 3]], [[0, 2], [1, 3]], [[0, 3], [1, 2]]];
+  function buildNation(code, era) {
+    const cands = DB.filter(p => p.country === code && (era === 'legend' || p.last >= LEAGUES[p.league].last - 2));
+    const best = new Map();                 // 동일인은 가장 높은 능력치 한 명
+    cands.forEach(p => { const k = pk(p); if (!best.has(k) || best.get(k).ovr < p.ovr) best.set(k, p); });
+    return pickRoster([...best.values()], new Set()).map(p => p.id);
+  }
+  function newIntl({ era = 'current', country = 'KOR' } = {}) {
+    const codes = [...INTL_GROUPS.A, ...INTL_GROUPS.B];
+    if (!codes.includes(country)) country = 'KOR';
+    const teams = {};
+    codes.forEach(c => { teams[c] = { code: c, name: COUNTRY_NAME[c], ids: buildNation(c, era), w: 0, l: 0, rs: 0, ra: 0, sp: 0 }; });
+    S.intl = { era, mine: country, teams, stage: 'group', round: 0, semis: null, final: null, results: [], champion: null };
+    dirty = true;
+  }
+  function intlMatches() {
+    const I = S.intl;
+    if (!I) return [];
+    if (I.stage === 'group') return ['A', 'B'].flatMap(g => RR[I.round].map(([i, j]) => [INTL_GROUPS[g][i], INTL_GROUPS[g][j]]));
+    if (I.stage === 'semi') return I.semis;
+    if (I.stage === 'final') return [I.final];
+    return [];
+  }
+  const intlStageLabel = I => I.stage === 'group' ? `조별리그 ${I.round + 1}차전` : I.stage === 'semi' ? '4강' : I.stage === 'final' ? '결승' : '대회 종료';
+  function intlTeamObj(code) {
+    const t = S.intl.teams[code];
+    const roster = t.ids.map(id => DB_BY_ID.get(id)).filter(Boolean).map(clonePlayer);
+    const sps = roster.filter(p => p.pos === 'SP');                 // 선발 로테이션
+    sps.forEach((p, i) => p.setFatigue(i === t.sp % Math.max(1, sps.length) ? 0 : 30));
+    return { name: t.name, roster };
+  }
+  function intlUserMatch() {
+    const I = S.intl;
+    const m = intlMatches().find(([a, b]) => a === I.mine || b === I.mine);
+    return m ? (m[0] === I.mine ? m[1] : m[0]) : null;
+  }
+  function intlGroupTable(g) {
+    return INTL_GROUPS[g].map(c => S.intl.teams[c])
+      .map(t => ({ code: t.code, name: t.name, w: t.w, l: t.l, rs: t.rs, ra: t.ra, mine: t.code === S.intl.mine }))
+      .sort((a, b) => b.w - a.w || (b.rs - b.ra) - (a.rs - a.ra) || b.rs - a.rs);
+  }
+  // 이번 라운드 경기를 모두 치르고 다음 단계로 (userEngine 이 있으면 그 경기 결과를 사용)
+  function intlFinishRound(userEngine) {
+    const I = S.intl;
+    const games = [], winners = [];
+    intlMatches().forEach(([a, b]) => {
+      let e, A = a, B = b;
+      if (userEngine && (a === I.mine || b === I.mine)) { e = userEngine; A = I.mine; B = a === I.mine ? b : a; }
+      else { e = buildGame(intlTeamObj(a), intlTeamObj(b)); e.autoMine = true; e.run(MODE.GAME); }
+      const ta = I.teams[A], tb = I.teams[B], sa = e.gs.mine.score, sb = e.gs.theirs.score;
+      ta.rs += sa; ta.ra += sb; tb.rs += sb; tb.ra += sa; ta.sp++; tb.sp++;
+      if (sa > sb) { ta.w++; tb.l++; winners.push(A); } else { tb.w++; ta.l++; winners.push(B); }
+      if (A === I.mine) S.tp += sa > sb ? 2 : 1;
+      games.push(`${ta.name} ${sa} : ${sb} ${tb.name}`);
+    });
+    I.results.push({ stage: intlStageLabel(I), games });
+    if (I.stage === 'group') {
+      I.round++;
+      if (I.round >= 3) {
+        const A = intlGroupTable('A'), B = intlGroupTable('B');
+        I.semis = [[A[0].code, B[1].code], [B[0].code, A[1].code]];
+        I.stage = 'semi';
+      }
+    } else if (I.stage === 'semi') {
+      I.final = winners;
+      I.stage = 'final';
+    } else if (I.stage === 'final') {
+      I.champion = winners[0];
+      I.stage = 'done';
+    }
+    dirty = true;
+  }
+  function intlView() {
+    const I = S.intl;
+    if (!I) return { active: false, countries: [...INTL_GROUPS.A, ...INTL_GROUPS.B].map(c => ({ code: c, name: COUNTRY_NAME[c] })) };
+    const opp = I.stage === 'done' ? null : intlUserMatch();
+    const roster = I.teams[I.mine].ids.map(id => DB_BY_ID.get(id)).filter(Boolean)
+      .map(p => ({ name: p.name, pos: p.pos, ovr: p.ovr, league: p.league }));
+    return {
+      active: true, era: I.era, mine: I.mine, mineName: COUNTRY_NAME[I.mine], stage: I.stage, stageLabel: intlStageLabel(I),
+      groups: { A: intlGroupTable('A'), B: intlGroupTable('B') },
+      semis: I.semis && I.semis.map(m => m.map(c => COUNTRY_NAME[c])), final: I.final && I.final.map(c => COUNTRY_NAME[c]),
+      champion: I.champion && COUNTRY_NAME[I.champion], results: I.results.slice().reverse(),
+      next: opp ? { opponent: COUNTRY_NAME[opp], label: intlStageLabel(I) } : null,
+      eliminated: I.stage !== 'done' && !opp, roster,
+      countries: [...INTL_GROUPS.A, ...INTL_GROUPS.B].map(c => ({ code: c, name: COUNTRY_NAME[c] })),
+    };
+  }
+  function intlQuick() {
+    const I = S.intl;
+    if (!I || I.stage === 'done') return [409, { error: '진행 중인 국가대표 대회가 없습니다.' }];
+    const opp = intlUserMatch();
+    let mine = null;
+    if (opp) {
+      const e = buildGame(intlTeamObj(I.mine), intlTeamObj(opp));
+      e.autoMine = true;
+      e.run(MODE.GAME);
+      mine = `${COUNTRY_NAME[I.mine]} ${e.gs.mine.score} : ${e.gs.theirs.score} ${COUNTRY_NAME[opp]}`;
+      intlFinishRound(e);
+    } else intlFinishRound(null);
+    return [200, { result: mine, intl: intlView() }];
   }
 
   // 훈련: 능력치 +1 (3 포인트, 잠재력까지) / 휴식: 피로 -20 (1 포인트)
@@ -398,7 +603,9 @@ function createService(seed) {
   // ── 영입 / 방출 ──
   const signCost = p => Math.max(2, Math.round((p.ovr - 60) * 0.8));
   function ownerOf(id) {
-    const t = S.teams.find(x => x.roster.some(p => p.id === id));
+    const base = DB_BY_ID.get(id) || S.players[id];
+    const key = base ? pk(base) : id;
+    const t = S.teams.find(x => x.roster.some(p => p.id === id || pk(p) === key));
     return t ? t.name : null;
   }
   function scoutSearch(body) {
@@ -419,7 +626,7 @@ function createService(seed) {
       total, tp: S.tp, rosterSize: myTeam().roster.length, rosterMax: ROSTER_MAX,
       results: res.slice(0, Math.min(60, Number(body.limit) || 40)).map(p => ({
         id: p.id, name: p.name, pos: p.pos, league: p.league, ovr: p.ovr, potential: p.potential,
-        team: p.team, first: p.first, last: p.last, owner: ownerOf(p.id), cost: signCost(p),
+        team: p.team, first: p.first, last: p.last, owner: ownerOf(p.id), cost: signCost(p), country: p.country,
       })),
     }];
   }
@@ -455,20 +662,23 @@ function createService(seed) {
   // ── 저장 / 불러오기 ──
   function exportState() {
     const pl = Object.values(S.players).map(p => [p.id, p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era, p.fatigue, p.first || 0, p.last || 0, p.most || '']);
-    const teams = S.teams.map(t => ({ id: t.id, name: t.name, user: t.user, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak, roster: t.roster.map(p => p.id) }));
-    return { version: 2, mode: S.mode, year: S.year, length: S.length, difficulty: S.difficulty, day: S.day, tp: S.tp, done: S.done, champion: S.champion,
+    const teams = S.teams.map(t => ({ id: t.id, name: t.name, user: t.user, group: t.group, league: t.league, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak, roster: t.roster.map(p => p.id) }));
+    return { version: 3, league: S.league, allStar: S.allStar, intl: S.intl, mode: S.mode, year: S.year, length: S.length, difficulty: S.difficulty, day: S.day, tp: S.tp, done: S.done, champion: S.champion,
       recent: S.recent, news: S.news, schedule: S.schedule, stats: S.stats, players: pl, teams };
   }
   function importState(o) {
-    if (!o || (o.version !== 1 && o.version !== 2)) return false;
+    if (!o || ![1, 2, 3].includes(o.version)) return false;
     const players = {};
     o.players.forEach(([id, name, pos, league, age, ovr, pot, sal, con, tm, era, fat, first, last, most]) => {
       const p = new Player(name, pos, league, age, ovr, pot, sal, con, tm, era);
       p.id = id; p.fatigue = fat; p.first = first || 0; p.last = last || 0; p.most = most || '';
       players[id] = p;
     });
-    const teams = o.teams.map(t => ({ ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
-    S = { version: 2, mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
+    // 동일인 키·국가는 선수 DB 에서 다시 붙임
+    Object.values(players).forEach(p => { const b = DB_BY_ID.get(p.id); if (b) { p.person = b.person; p.country = b.country; } else p.person = p.id; });
+    const teams = o.teams.map(t => ({ group: '', league: o.league || 'KBO', ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
+    S = { version: 3, league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
+      mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
       recent: o.recent || [], news: o.news || [], schedule: o.schedule, stats: o.stats || {}, players, teams };
     games.clear();
     dirty = false;
@@ -483,10 +693,17 @@ function createService(seed) {
     else if (key === 'POST api/season/new') {
       newSeason({ length: Number(body.length || 36), level: ['weak', 'mid', 'strong'].includes(body.level) ? body.level : 'mid',
         difficulty: DIFFICULTY[body.difficulty] ? body.difficulty : 'NORMAL', keep: !!body.keep,
-        mode: body.mode === 'legend' ? 'legend' : 'current' });
+        mode: body.mode === 'legend' ? 'legend' : 'current', league: LEAGUE_KEYS.includes(body.league) ? body.league : 'KBO' });
       res = [200, seasonView()];
     } else if (key === 'POST api/season/quick') res = quick(clamp(Number(body.days || 1), 1, 200));
     else if (key === 'GET api/stats') res = [200, statsView()];
+    else if (key === 'POST api/allstar/auto') {
+      if (!allStarDue()) res = [409, { error: '지금은 올스타전이 없습니다.' }];
+      else { autoAllStar(); res = [200, { allStar: S.allStar }]; }
+    }
+    else if (key === 'GET api/intl') res = [200, intlView()];
+    else if (key === 'POST api/intl/new') { newIntl({ era: body.era === 'legend' ? 'legend' : 'current', country: body.country }); res = [200, intlView()]; }
+    else if (key === 'POST api/intl/quick') res = intlQuick();
     else if (key === 'POST api/train') res = train(body);
     else if (key === 'POST api/scout/search') res = scoutSearch(body);
     else if (key === 'POST api/scout/sign') res = sign(body);

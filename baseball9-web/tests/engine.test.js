@@ -112,6 +112,8 @@ test('시즌: 10개 구단, 하루 5경기, 모든 팀 하루 1경기', () => {
 
 test('시즌: 끝까지 자동 진행 시 기록이 서로 맞음', () => {
   const svc = createService(12);
+  svc.dispatch('POST', '/api/season/quick', { days: 100 });
+  svc.dispatch('POST', '/api/allstar/auto', {});
   const r = svc.dispatch('POST', '/api/season/quick', { days: 100 });
   const s = r.payload.season;
   assert.ok(s.done);
@@ -222,6 +224,73 @@ test('영입·방출', () => {
   assert.ok(svc2.importState(JSON.parse(JSON.stringify(svc.exportState()))));
   assert.strictEqual(svc2.state.teams[0].roster.length, before);
   assert.strictEqual(svc2.state.mode, 'current');
+});
+
+test('리그별 구단 수와 동일인 중복 없음', () => {
+  const expect = { KBO: 10, NPB: 12, MLB: 30, WORLD: 12 };
+  for (const league of Object.keys(expect)) {
+    const svc = createService(51);
+    svc.dispatch('POST', '/api/season/new', { league, mode: 'current', length: 18 });
+    const st = svc.state;
+    assert.strictEqual(st.teams.length, expect[league], league);
+    const persons = st.teams.flatMap(t => t.roster.map(p => p.person || p.id));
+    assert.strictEqual(new Set(persons).size, persons.length, league + ' 같은 사람이 두 팀에');
+    st.schedule.forEach(day => assert.strictEqual(new Set(day.flat()).size, expect[league]));
+    if (league === 'WORLD') assert.deepStrictEqual([...new Set(st.teams.slice(1).map(t => t.league))].sort(), ['KBO', 'MLB', 'NPB']);
+  }
+});
+
+test('올스타전: 시즌 중반에 열리고, 지휘하거나 자동으로 치름', () => {
+  const svc = createService(52);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18 });
+  assert.strictEqual(svc.dispatch('POST', '/api/game', { kind: 'allstar' }).status, 409, '중반 전에는 없음');
+  svc.dispatch('POST', '/api/season/quick', { days: 9 });
+  let s = svc.dispatch('GET', '/api/season').payload;
+  assert.ok(s.allStar.due);
+  const g = svc.dispatch('POST', '/api/game', { kind: 'allstar' }).payload;
+  assert.strictEqual(g.state.kind, 'allstar');
+  assert.ok(/올스타/.test(g.state.myName) && /올스타/.test(g.state.opponent));
+  const end = svc.dispatch('POST', `/api/game/${g.state.gameId}/advance`, { mode: 'game', ack: true }).payload;
+  assert.ok(end.state.done);
+  s = svc.dispatch('GET', '/api/season').payload;
+  assert.ok(s.allStar.done && s.allStar.result && s.allStar.mvp);
+  assert.strictEqual(s.day, 9, '올스타전은 정규시즌 날짜를 넘기지 않음');
+  // 지휘하지 않고 넘어가면 자동으로 치러짐
+  const svc2 = createService(53);
+  svc2.dispatch('POST', '/api/season/new', { league: 'MLB', length: 18 });
+  const q = svc2.dispatch('POST', '/api/season/quick', { days: 18 }).payload;
+  assert.ok(q.stoppedForAllStar, '자동 진행은 올스타전 앞에서 멈춤');
+  assert.strictEqual(q.season.day, 9);
+  assert.strictEqual(svc2.dispatch('POST', '/api/game', {}).status, 409, '올스타전 전에는 정규시즌 경기 불가');
+  assert.strictEqual(svc2.dispatch('POST', '/api/allstar/auto', {}).status, 200);
+  svc2.dispatch('POST', '/api/season/quick', { days: 18 });
+  const s2 = svc2.dispatch('GET', '/api/season').payload;
+  assert.ok(s2.allStar.done && s2.done);
+});
+
+test('국가대표: 조별리그 → 4강 → 결승, 직접 지휘 경기도 반영', () => {
+  const svc = createService(54);
+  let v = svc.dispatch('POST', '/api/intl/new', { era: 'legend', country: 'KOR' }).payload;
+  assert.ok(v.active && v.roster.length === 20);
+  assert.ok(v.roster.some(p => p.name === '선동열'));
+  const ids = svc.state.intl.teams.KOR.ids;
+  assert.strictEqual(new Set(ids).size, ids.length);
+  // 1차전은 직접 지휘
+  const g = svc.dispatch('POST', '/api/game', { kind: 'intl' }).payload;
+  assert.strictEqual(g.state.myName, '대한민국');
+  svc.dispatch('POST', `/api/game/${g.state.gameId}/advance`, { mode: 'game', ack: true });
+  v = svc.dispatch('GET', '/api/intl').payload;
+  assert.strictEqual(v.results.length, 1);
+  assert.strictEqual(v.groups.A.reduce((a, t) => a + t.w + t.l, 0), 4, 'A조 1라운드 2경기');
+  let guard = 0;
+  while (v.stage !== 'done' && guard++ < 10) v = svc.dispatch('POST', '/api/intl/quick', {}).payload.intl;
+  assert.strictEqual(v.stage, 'done');
+  assert.ok(v.champion);
+  assert.strictEqual(v.results.length, 5, '조별 3 + 4강 + 결승');
+  const saved = JSON.parse(JSON.stringify(svc.exportState()));
+  const svc2 = createService(1);
+  assert.ok(svc2.importState(saved));
+  assert.strictEqual(svc2.dispatch('GET', '/api/intl').payload.champion, v.champion);
 });
 
 test('밸런스: 팀당 득점이 현실 범위', () => {

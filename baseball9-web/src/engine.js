@@ -46,7 +46,7 @@ class Player {
   toDict() {
     return { id: this.id, name: this.name, pos: this.pos, ovr: this.ovr, effOvr: this.effOvr,
       fatigue: this.fatigue, hp: this.hp, condition: this.condition[0], team: this.team, league: this.league,
-      first: this.first || null, last: this.last || null };
+      first: this.first || null, last: this.last || null, country: this.country || '' };
   }
 }
 
@@ -669,12 +669,19 @@ class GameEngine {
 const ROSTER_POS = ['SP', 'SP', 'RP', 'RP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'DH', 'DH'];
 const OPP_POS = ['SP', 'RP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'DH'];
 
-// players.js 행: [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, KBO 최다 소속, 첫 시즌, 마지막 시즌, 전성기]
+// players.js 행: [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, 최다 소속(계보), 첫 시즌, 마지막 시즌, 전성기, 국가, 동일인 키]
 function playerFromRow(r) {
-  const [id, name, pos, league, by, ovr, pot, last, most, first, lastY, peak] = r;
+  const [id, name, pos, league, by, ovr, pot, last, most, first, lastY, peak, country, person] = r;
   const p = new Player(name, pos, league, by ? peak - by : 28, ovr, pot, 0, 1, last, peak);
   p.id = id; p.most = most; p.first = first; p.last = lastY;
+  p.country = country || ''; p.person = person || id;   // 리그가 달라도 같은 사람이면 같은 person
   return p;
+}
+// 같은 선수를 새 객체로 복사 (국가대표·올스타처럼 소속팀 피로와 분리할 때)
+function clonePlayer(p) {
+  const c = new Player(p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era);
+  Object.assign(c, { id: p.id, most: p.most, first: p.first, last: p.last, country: p.country, person: p.person });
+  return c;
 }
 const buildAllPlayers = () => PLAYERS.map(playerFromRow);
 const candidates = (pool, pos, used) => pool.filter(p => p.pos === pos && !used.has(p.id)).sort((a, b) => b.ovr - a.ovr);
@@ -741,5 +748,5 @@ const opponentNames = () => [...KBO_TEAMS, ...NPB_TEAMS, ...MLB_TEAMS];
 
 if (typeof module !== 'undefined') {
   module.exports = { GameEngine, GameState, TeamState, Player, MODE, makeRng, C, DIFFICULTY, PITCH_CALLS, POS_LABEL,
-    buildAllPlayers, playerFromRow, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
+    buildAllPlayers, playerFromRow, clonePlayer, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
 }

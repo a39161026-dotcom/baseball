@@ -122,7 +122,7 @@
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 
   /* 탭 + 시즌 화면 */
-  nav.tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px; }
+  nav.tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px; }
   nav.tabs button { min-height: 40px; padding: 6px 4px; font-size: 13px; background: var(--panel); border-color: var(--line); }
   nav.tabs button[aria-current="page"] { background: var(--panel-2); color: var(--gold); border-color: var(--gold); font-weight: 700; }
   body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
@@ -152,7 +152,11 @@
   .scout-row:last-child { border-bottom: 0; }
   .scout-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
   .scout-filters input { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font-size: 14px; min-height: 42px; min-width: 0; font-family: inherit; }
-  @media (max-width: 520px) { nav.tabs button { font-size: 12px; padding: 6px 2px; } .scout-filters { grid-template-columns: 1fr 1fr; } .scout-filters input { grid-column: 1 / -1; } }
+  .star { background: linear-gradient(180deg, #2a2208, var(--panel)); border-color: #8a6a14; }
+  .bracket { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .bracket div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .stand tr.mine td { color: var(--gold); font-weight: 700; }
+  @media (max-width: 520px) { nav.tabs button { font-size: 11px; padding: 6px 1px; } .scout-filters { grid-template-columns: 1fr 1fr; } .scout-filters input { grid-column: 1 / -1; } }
 </style>
 
 <header>
@@ -170,10 +174,19 @@
     <button data-tab="stats">📈 기록</button>
     <button data-tab="train">💪 훈련</button>
     <button data-tab="scout">🔍 영입</button>
+    <button data-tab="intl">🌏 대표</button>
   </nav>
 
   <!-- 홈 -->
   <section id="home">
+    <div class="panel star" id="starPanel" hidden>
+      <p class="title">⭐ 올스타전</p>
+      <p id="starText" style="margin:0 0 10px"></p>
+      <div class="controls" id="starBtns"><div class="group">
+        <button class="gold" id="starPlay">⭐ 올스타전 지휘하기</button>
+        <button id="starAuto">⏩ 자동으로 치르기</button>
+      </div></div>
+    </div>
     <div class="panel" id="todayPanel">
       <p class="title" id="dayTitle"></p>
       <div class="today">
@@ -203,7 +216,9 @@
       <div class="row">
         <label class="lbl" for="lenSel">경기 수</label>
         <select id="lenSel"><option value="18">18경기</option><option value="36" selected>36경기</option><option value="72">72경기</option><option value="144">144경기</option></select>
-        <label class="lbl" for="modeSel">리그</label>
+        <label class="lbl" for="leagueSel">리그</label>
+        <select id="leagueSel"><option value="KBO" selected>KBO (10팀)</option><option value="NPB">NPB 일본 (12팀)</option><option value="MLB">MLB 미국 (30팀)</option><option value="WORLD">월드 리그 (KBO·NPB·MLB 강팀 12팀)</option></select>
+        <label class="lbl" for="modeSel">선수 기준</label>
         <select id="modeSel"><option value="current" selected>현역 리그 (2025 실제 소속)</option><option value="legend">역대 레전드 리그</option></select>
         <label class="lbl" for="strength">우리 팀 강도</label>
         <select id="strength"><option value="weak">약체</option><option value="mid" selected>중위권</option><option value="strong">강팀</option></select>
@@ -211,7 +226,7 @@
         <select id="diffSel"><option value="EASY">쉬움</option><option value="NORMAL" selected>보통</option><option value="HARD">어려움</option></select>
         <button id="btnNewLeague">새 리그 시작</button>
       </div>
-      <p class="muted" style="margin:8px 0 0">상대 9개 구단은 KBO 실존 선수로 채워집니다. 현역 리그는 2025년 소속, 레전드 리그는 가장 오래 뛴 구단 기준입니다. 우리 팀은 KBO·NPB·MLB 전체에서 뽑습니다. 새 리그를 시작하면 지금 시즌 기록이 지워지며, 버튼을 한 번 더 눌러야 시작됩니다.</p>
+      <p class="muted" style="margin:8px 0 0">상대 구단은 실존 선수로 채워집니다. 현역은 마지막 시즌(KBO·NPB 2025, MLB 2024) 소속, 레전드는 가장 오래 뛴 구단(전신 포함) 기준입니다. 같은 사람은 한 팀에만 들어갑니다. 우리 팀은 KBO·NPB·MLB 전체에서 뽑습니다. 새 리그를 시작하면 지금 시즌 기록이 지워지며, 버튼을 한 번 더 눌러야 시작됩니다.</p>
     </div>
   </section>
 
@@ -339,6 +354,39 @@
     </div>
   </section>
 
+  <!-- 국가대표 -->
+  <section id="intl" hidden>
+    <div class="panel" id="intlSetup">
+      <p class="title">🌏 국가대표 대회</p>
+      <p class="muted" style="margin:0 0 10px">8개국이 2개 조로 나뉘어 조별리그(3경기) → 4강 → 결승을 치릅니다. 대표팀은 국적(KBO)·출생국(NPB·MLB) 기준으로 3개 리그 전체에서 뽑습니다. 소속팀 피로와는 따로 갑니다.</p>
+      <div class="row">
+        <label class="lbl" for="intlCountry">우리나라</label><select id="intlCountry"></select>
+        <label class="lbl" for="intlEra">대표팀</label>
+        <select id="intlEra"><option value="current" selected>현역 대표 (최근 3시즌)</option><option value="legend">역대 드림팀</option></select>
+        <button class="gold" id="intlStart">대회 시작</button>
+      </div>
+    </div>
+    <div id="intlBody" hidden>
+      <div class="panel">
+        <p class="title" id="intlTitle"></p>
+        <p id="intlNext" style="margin:0 0 10px"></p>
+        <div class="controls" id="intlBtns"><div class="group">
+          <button class="gold" id="intlPlay">⚾ 경기 지휘하기</button>
+          <button id="intlAuto">⏩ 자동 진행</button>
+        </div></div>
+      </div>
+      <div class="grid2">
+        <div class="panel"><p class="title">A조</p><div class="scroll-x"><table class="stand" id="intlA"></table></div></div>
+        <div class="panel"><p class="title">B조</p><div class="scroll-x"><table class="stand" id="intlB"></table></div></div>
+      </div>
+      <div class="panel"><p class="title">토너먼트</p><div class="bracket" id="intlBracket"></div></div>
+      <div class="grid2">
+        <div class="panel"><p class="title">경기 결과</p><div id="intlResults" class="muted"></div></div>
+        <div class="panel"><p class="title" id="intlRosterTitle"></p><div id="intlRoster" class="side"></div></div>
+      </div>
+    </div>
+  </section>
+
   <!-- 훈련 -->
   <section id="train" hidden>
     <div class="panel">
@@ -415,7 +463,7 @@
   }
 
   // ── 탭 ──
-  const SECTIONS = ['home', 'setup', 'game', 'result', 'stand', 'stats', 'train', 'scout'];
+  const SECTIONS = ['home', 'setup', 'game', 'result', 'stand', 'stats', 'train', 'scout', 'intl'];
   function show(section) {
     SECTIONS.forEach(s => { $(s).hidden = s !== section; });
   }
@@ -434,6 +482,7 @@
       if (tab === 'stats') renderStats();
       if (tab === 'train') renderTrain();
       if (tab === 'scout') renderScout();
+      if (tab === 'intl') renderIntl();
     }
     window.scrollTo(0, 0);
   }
@@ -441,7 +490,7 @@
 
   function refreshHeader() {
     const s = api('GET', '/api/season');
-    $('seasonInfo').textContent = `${s.year} ${s.mode === 'legend' ? '레전드' : '현역'} 리그 · ${Math.min(s.day + 1, s.length)}/${s.length}일`;
+    $('seasonInfo').textContent = `${s.year} ${s.leagueLabel} ${s.mode === 'legend' ? '레전드' : '현역'} · ${Math.min(s.day + 1, s.length)}/${s.length}일`;
     const me = s.standings.find(t => t.user);
     $('recordInfo').textContent = `${me.w}승 ${me.l}패 · ${me.rank}위`;
     return s;
@@ -460,6 +509,12 @@
   function renderHome() {
     const s = refreshHeader();
     $('champPanel').hidden = !s.done;
+    const as = s.allStar || {};
+    $('starPanel').hidden = !(as.due || as.done);
+    $('starBtns').hidden = !as.due;
+    ['goPlay', 'quick1', 'quick7'].forEach(id => { $(id).disabled = !!as.due; });   // 올스타 휴식기에는 정규시즌 잠시 멈춤
+    $('starText').textContent = as.due ? '시즌 중반! 팬 투표(능력치+시즌 성적)로 뽑힌 올스타전이 열립니다. 우리 팀 선수가 속한 쪽을 지휘합니다. 이기면 훈련 포인트 3.'
+      : as.done ? `${as.result}${as.mvp ? ' · MVP ' + as.mvp : ''}` : '';
     $('todayPanel').hidden = s.done;
     if (s.done) {
       const me = s.standings.find(t => t.user);
@@ -483,7 +538,8 @@
     try {
       const r = api('POST', '/api/season/quick', { days });
       const w = r.results.filter(x => x.result === '승').length;
-      toast(`${r.results.length}경기 자동 진행: ${w}승 ${r.results.length - w}패`);
+      toast(r.stoppedForAllStar ? `${r.results.length}경기 진행 (${w}승 ${r.results.length - w}패) · ⭐ 올스타전 휴식기에서 멈췄습니다`
+                                : `${r.results.length}경기 자동 진행: ${w}승 ${r.results.length - w}패`);
       save();
       renderHome();
     } catch (e) { toast(e.message); }
@@ -507,7 +563,7 @@
     }
     clearTimeout(confirmTimer); confirmTimer = null; b.textContent = '새 리그 시작'; b.className = '';
     touched = true;
-    api('POST', '/api/season/new', { length: Number($('lenSel').value), level: $('strength').value, mode: $('modeSel').value, difficulty: $('diffSel').value });
+    api('POST', '/api/season/new', { league: $('leagueSel').value, length: Number($('lenSel').value), level: $('strength').value, mode: $('modeSel').value, difficulty: $('diffSel').value });
     state = null; gameId = null; manualLineup = null; stopAuto();
     save(); toast('새 리그를 시작했습니다'); renderHome();
   };
@@ -562,17 +618,27 @@
   function mkBtn(text, fn) { const b = document.createElement('button'); b.className = 'sm'; b.textContent = text; b.onclick = fn; return b; }
   $('btnAutoLineup').onclick = () => { manualLineup = null; renderSetup(); };
 
-  $('btnStart').onclick = () => {
+  function startGame(body) {
     try {
       touched = true;
-      const res = api('POST', '/api/game', { starter: $('starterSel').value, lineup: manualLineup });
+      const res = api('POST', '/api/game', body);
       gameId = res.state.gameId; state = res.state;
       $('log').innerHTML = '';
+      currentTab = 'play';
+      document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === 'play' ? 'page' : 'false'));
       show('game');
+      if (res.state.title) appendLines([{ kind: 'INNING', text: res.state.title }]);
       appendLines(res.lines);
       render();
       window.scrollTo(0, 0);
     } catch (e) { toast(e.message); }
+  }
+  $('btnStart').onclick = () => startGame({ starter: $('starterSel').value, lineup: manualLineup });
+  $('starPlay').onclick = () => startGame({ kind: 'allstar' });
+  $('starAuto').onclick = () => {
+    touched = true;
+    try { const r = api('POST', '/api/allstar/auto', {}); toast(`올스타전: ${r.allStar.result}`); save(); } catch (e) { toast(e.message); }
+    renderHome();
   };
 
   // ── 경기 진행 ──
@@ -750,12 +816,14 @@
     $('boxTheirsTitle').textContent = `⚾ ${s.opponent} 투수`;
     $('boxMine').innerHTML = box(s.box.mine);
     $('boxTheirs').innerHTML = box(s.box.theirs);
-    const season = api('GET', '/api/season');
-    $('resNews').innerHTML = season.news.map(n => `<div class="newsline">${esc(n)}</div>`).join('') || '없음';
+    const lines = s.kind === 'season' ? api('GET', '/api/season').news : (s.extra || []);
+    $('resNews').innerHTML = lines.map(n => `<div class="newsline">${esc(n)}</div>`).join('') || '없음';
+    $('resNews').previousElementSibling.textContent = s.kind === 'season' ? '오늘 다른 구장' : s.kind === 'allstar' ? '올스타전' : '이번 라운드 결과';
+    $('btnHome').textContent = s.kind === 'intl' ? '🌏 대회 화면으로' : '🏠 홈으로';
     show('result');
     window.scrollTo(0, 0);
   }
-  $('btnHome').onclick = () => { state = null; gameId = null; go('home'); };
+  $('btnHome').onclick = () => { const k = state && state.kind; state = null; gameId = null; go(k === 'intl' ? 'intl' : 'home'); };
 
   // ── 순위 / 기록 / 훈련 ──
   function renderStand() {
@@ -861,6 +929,47 @@
   $('scoutQ').addEventListener('input', () => { clearTimeout(scoutTimer); scoutTimer = setTimeout(renderScout, 250); });
   $('scoutLeague').onchange = renderScout;
   $('scoutPos').onchange = renderScout;
+
+  // ── 국가대표 ──
+  function renderIntl() {
+    const v = api('GET', '/api/intl');
+    const sel = $('intlCountry');
+    if (!sel.options.length) v.countries.forEach(c => { const o = document.createElement('option'); o.value = c.code; o.textContent = c.name; sel.appendChild(o); });
+    $('intlBody').hidden = !v.active;
+    $('intlSetup').querySelector('.title').textContent = v.active ? '🌏 새 대회 시작' : '🌏 국가대표 대회';
+    if (!v.active) return;
+    $('intlTitle').textContent = `🌏 ${v.mineName} ${v.era === 'legend' ? '역대 드림팀' : '현역 대표'} · ${v.stageLabel}`;
+    $('intlBtns').hidden = v.stage === 'done';
+    $('intlPlay').disabled = !v.next;
+    $('intlAuto').textContent = v.next ? '⏩ 자동 진행' : '⏩ 다음 라운드 진행';
+    $('intlNext').textContent = v.stage === 'done' ? `🏆 우승: ${v.champion}${v.champion === v.mineName ? ' — 축하합니다!' : ''}`
+      : v.next ? `다음 경기: ${v.next.label} vs ${v.next.opponent}` : `${v.mineName}은(는) 탈락했습니다. 남은 경기를 지켜볼 수 있습니다.`;
+    const table = rows => '<tr><th>순위</th><th style="text-align:left">나라</th><th>승</th><th>패</th><th>득</th><th>실</th></tr>' +
+      rows.map((t, i) => `<tr class="${t.mine ? 'mine' : ''}"><td>${i + 1}</td><td class="t">${esc(t.name)}</td><td>${t.w}</td><td>${t.l}</td><td>${t.rs}</td><td>${t.ra}</td></tr>`).join('');
+    $('intlA').innerHTML = table(v.groups.A);
+    $('intlB').innerHTML = table(v.groups.B);
+    $('intlBracket').innerHTML =
+      (v.semis ? v.semis.map((m, i) => `<div><b>4강 ${i + 1}</b><br>${esc(m[0])} vs ${esc(m[1])}</div>`).join('') : '<div class="muted">조 1·2위가 4강에 올라갑니다</div>') +
+      (v.final ? `<div><b>결승</b><br>${esc(v.final[0])} vs ${esc(v.final[1])}</div>` : '') +
+      (v.champion ? `<div><b>🏆 우승</b><br>${esc(v.champion)}</div>` : '');
+    $('intlResults').innerHTML = v.results.length
+      ? v.results.map(r => `<div style="margin-bottom:6px"><b style="color:var(--gold)">${esc(r.stage)}</b>${r.games.map(g => `<div class="newsline">${esc(g)}</div>`).join('')}</div>`).join('')
+      : '아직 경기가 없습니다.';
+    $('intlRosterTitle').textContent = `${v.mineName} 대표 명단 (${v.roster.length}명)`;
+    $('intlRoster').innerHTML = '<ul style="padding-left:18px">' + v.roster.map(p => `<li>${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)} · OVR ${p.ovr}</span></li>`).join('') + '</ul>';
+  }
+  $('intlStart').onclick = () => {
+    touched = true;
+    try { api('POST', '/api/intl/new', { country: $('intlCountry').value, era: $('intlEra').value }); save(); toast('국가대표 대회를 시작했습니다'); }
+    catch (e) { toast(e.message); }
+    renderIntl();
+  };
+  $('intlPlay').onclick = () => startGame({ kind: 'intl' });
+  $('intlAuto').onclick = () => {
+    touched = true;
+    try { const r = api('POST', '/api/intl/quick', {}); if (r.result) toast(r.result); save(); } catch (e) { toast(e.message); }
+    renderIntl();
+  };
 
   // ── 시작 ──
   go('home');

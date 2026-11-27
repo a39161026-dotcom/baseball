@@ -11,6 +11,7 @@
   통산 OPS+ 를 7:3 으로 섞고, 통산 타석이 적으면 평균 쪽으로 당깁니다.  OVR = 68 + (값-100)*0.30
 - 투수: 시즌 ERA+ = 100 * 리그ERA / ERA. 규정 시즌 상위 3시즌 평균과 통산 ERA+ 를 7:3, 이닝이 적으면 보정.
   불펜은 ERA+ 를 100 기준으로 40% 할인, 선발은 통산 이닝 보너스(최대 +8).  OVR = 68 + (값-100)*0.25
+- 리그 수준 보정: MLB 0, NPB -3, KBO -6 (리그끼리 맞붙을 때 차이가 나도록)
 """
 import csv
 import io
@@ -47,6 +48,68 @@ KBO_FRANCHISE = {
     "Sammi": None, "Chungbo": None, "Pacific": None, "Hyundai": None, "SBW": None,
 }
 KBO_TEAM_KOR = {"Sammi": "삼미", "Chungbo": "청보", "Pacific": "태평양", "Hyundai": "현대", "SBW": "쌍방울"}
+
+# NPB: 옛 구단 코드 → 현재 12개 구단 (계보)
+NPB_FRANCHISE = {
+    "YOMIURI": "YOMIURI", "KYOJIN": "YOMIURI", "HANSHIN": "HANSHIN", "OSAKA": "HANSHIN",
+    "CHUNICHI": "CHUNICHI", "NAGOYA": "CHUNICHI", "CHUBU NIPPON": "CHUNICHI",
+    "DENA": "DENA", "YOKOHAMA": "DENA", "TAIYO": "DENA", "HIROSHIMA": "HIROSHIMA",
+    "YAKULT": "YAKULT", "KOKUTETSU": "YAKULT", "SANKEI": "YAKULT", "ATOMS": "YAKULT",
+    "SOFTBANK": "SOFTBANK", "DAIEI": "SOFTBANK", "NANKAI": "SOFTBANK",
+    "NIPPON-HAM": "NIPPON-HAM", "TOEI": "NIPPON-HAM", "TOKYU": "NIPPON-HAM", "NITTAKU": "NIPPON-HAM", "KYUEI": "NIPPON-HAM",
+    "LOTTE": "LOTTE", "ORIONS": "LOTTE", "DAIMAI": "LOTTE", "MAINICHI": "LOTTE",
+    "ORIX": "ORIX", "HANKYU": "ORIX", "KINTETSU": "ORIX",
+    "SEIBU": "SEIBU", "NISHITETSU": "SEIBU", "TAIHEIYO CLUB": "SEIBU", "CROWN LIGHTER": "SEIBU",
+    "RAKUTEN": "RAKUTEN",
+}
+NPB_NAME = {
+    "YOMIURI": "요미우리 자이언츠", "HANSHIN": "한신 타이거스", "CHUNICHI": "주니치 드래곤스", "DENA": "요코하마 DeNA 베이스타스",
+    "HIROSHIMA": "히로시마 도요 카프", "YAKULT": "도쿄 야쿠르트 스왈로스", "SOFTBANK": "후쿠오카 소프트뱅크 호크스",
+    "NIPPON-HAM": "홋카이도 닛폰햄 파이터스", "LOTTE": "지바 롯데 마린스", "ORIX": "오릭스 버펄로스",
+    "RAKUTEN": "도호쿠 라쿠텐 골든이글스", "SEIBU": "사이타마 세이부 라이온스",
+}
+NPB_GROUP = {k: ("센트럴" if k in ("YOMIURI", "HANSHIN", "CHUNICHI", "DENA", "HIROSHIMA", "YAKULT") else "퍼시픽") for k in NPB_NAME}
+
+# MLB: 옛 구단 코드 → 현재 30개 구단
+MLB_NAME = {
+    "ARI": "애리조나 다이아몬드백스", "ATL": "애틀랜타 브레이브스", "BAL": "볼티모어 오리올스", "BOS": "보스턴 레드삭스",
+    "CHA": "시카고 화이트삭스", "CHN": "시카고 컵스", "CIN": "신시내티 레즈", "CLE": "클리블랜드 가디언스",
+    "COL": "콜로라도 로키스", "DET": "디트로이트 타이거스", "HOU": "휴스턴 애스트로스", "KCA": "캔자스시티 로열스",
+    "LAA": "LA 에인절스", "LAN": "LA 다저스", "MIA": "마이애미 말린스", "MIL": "밀워키 브루어스",
+    "MIN": "미네소타 트윈스", "NYA": "뉴욕 양키스", "NYN": "뉴욕 메츠", "OAK": "오클랜드 애슬레틱스",
+    "PHI": "필라델피아 필리스", "PIT": "피츠버그 파이리츠", "SDN": "샌디에이고 파드리스", "SEA": "시애틀 매리너스",
+    "SFN": "샌프란시스코 자이언츠", "SLN": "세인트루이스 카디널스", "TBA": "탬파베이 레이스", "TEX": "텍사스 레인저스",
+    "TOR": "토론토 블루제이스", "WAS": "워싱턴 내셔널스",
+}
+MLB_FRANCHISE = dict({k: k for k in MLB_NAME}, **{
+    "WS1": "MIN", "NY1": "SFN", "BRO": "LAN", "PHA": "OAK", "KC1": "OAK", "BSN": "ATL", "ML1": "ATL",
+    "SLA": "BAL", "MON": "WAS", "CAL": "LAA", "ANA": "LAA", "ML4": "MIL", "SE1": "MIL", "FLO": "MIA", "WS2": "TEX",
+})
+MLB_GROUP = {k: ("아메리칸" if k in ("BAL", "BOS", "NYA", "TBA", "TOR", "CHA", "CLE", "DET", "KCA", "MIN",
+                                     "HOU", "LAA", "OAK", "SEA", "TEX") else "내셔널") for k in MLB_NAME}
+KBO_GROUP = {n: ("드림" if n in ("삼성라이온즈", "롯데자이언츠", "두산베어스", "SSG랜더스", "KT위즈") else "나눔")
+             for n in ["KIA타이거즈", "삼성라이온즈", "LG트윈스", "두산베어스", "KT위즈", "SSG랜더스",
+                       "롯데자이언츠", "한화이글스", "NC다이노스", "키움히어로즈"]}
+
+# 국적/출생국 표기 → 국가 코드
+COUNTRY = {
+    "korea": "KOR", "south korea": "KOR", "japan": "JPN", "usa": "USA", "united states": "USA",
+    "dominica republic": "DOM", "dominican republic": "DOM", "d.r.": "DOM", "venezuela": "VEN", "cuba": "CUB",
+    "puerto rico": "PUR", "p.r.": "PUR", "mexico": "MEX", "taiwan": "TPE", "canada": "CAN", "can": "CAN",
+    "panama": "PAN", "netherlands": "NED", "curacao": "NED", "aruba": "NED", "australia": "AUS",
+    "colombia": "COL", "nicaragua": "NCA", "china": "CHN", "brazil": "BRA",
+}
+COUNTRY_NAME = {"KOR": "대한민국", "JPN": "일본", "USA": "미국", "DOM": "도미니카공화국", "VEN": "베네수엘라",
+                "PUR": "푸에르토리코", "CUB": "쿠바", "MEX": "멕시코", "TPE": "대만", "CAN": "캐나다", "PAN": "파나마",
+                "NED": "네덜란드", "AUS": "호주", "COL": "콜롬비아", "NCA": "니카라과", "CHN": "중국", "BRA": "브라질"}
+LEAGUE_LAST = {"KBO": 2025, "NPB": 2025, "MLB": 2024}
+# 리그 수준 보정: 능력치는 각 리그 평균 대비로 계산되므로, 리그끼리 맞붙을 때(월드 리그·국가대표·영입)를 위해
+# MLB 기준으로 NPB 와 KBO 를 낮춤. 리그 안의 순위는 바뀌지 않음.
+LEAGUE_OFFSET = {"MLB": 0, "NPB": -3, "KBO": -6}
+
+
+def country_of(v):
+    return COUNTRY.get(str(v or "").strip().lower(), "")
 
 
 def load(key):
@@ -252,7 +315,10 @@ def build_kbo():
                     name=lambda p: (p.get("Name") or "").strip(),
                     birth=lambda p: int(num(p.get("BirthYear"))) or None,
                     fallback_pos=lambda p: {"Catcher": "C", "Outfielder": "OF", "Infielder": "3B"}.get(p.get("Position"), "DH"),
-                    team_name=lambda code: KBO_FRANCHISE.get(code) or KBO_TEAM_KOR.get(code) or code)
+                    team_name=lambda code: KBO_FRANCHISE.get(code) or KBO_TEAM_KOR.get(code) or code,
+                    franchise=lambda code: KBO_FRANCHISE.get(code),
+                    roman=lambda p: (p.get("LastNameEng") or "", p.get("FirstNameEng") or ""),
+                    country=lambda p: country_of(p.get("Nationality")))
 
 
 def build_npb():
@@ -287,7 +353,11 @@ def build_npb():
     return assemble("N", "NPB", people, bat_r, pit_r, starters, fld, bat_team, pit_team,
                     name=lambda p: (p.get("nameGiven") or f"{p.get('nameFirst', '')} {p.get('nameLast', '')}").strip(),
                     birth=lambda p: int(num(p.get("birthYear"))) or None,
-                    fallback_pos=lambda p: "DH", team_name=lambda code: code)
+                    fallback_pos=lambda p: "DH",
+                    team_name=lambda code: NPB_NAME.get(NPB_FRANCHISE.get(code, ""), code),
+                    franchise=lambda code: NPB_NAME.get(NPB_FRANCHISE.get(code, "")),
+                    roman=lambda p: (p.get("nameLast") or "", p.get("nameFirst") or ""),
+                    country=lambda p: country_of(p.get("birthPlace")))
 
 
 def build_mlb():
@@ -321,10 +391,15 @@ def build_mlb():
     return assemble("M", "MLB", people, bat_r, pit_r, starters, fld, bat_team, pit_team,
                     name=lambda p: f"{p.get('nameFirst', '')} {p.get('nameLast', '')}".strip(),
                     birth=lambda p: int(num(p.get("birthYear"))) or None,
-                    fallback_pos=lambda p: "DH", team_name=lambda code: code)
+                    fallback_pos=lambda p: "DH",
+                    team_name=lambda code: MLB_NAME.get(MLB_FRANCHISE.get(code, ""), code),
+                    franchise=lambda code: MLB_NAME.get(MLB_FRANCHISE.get(code, "")),
+                    roman=lambda p: (p.get("nameLast") or "", p.get("nameFirst") or ""),
+                    country=lambda p: country_of(p.get("birthCountry")))
 
 
-def assemble(prefix, league, people, bat_r, pit_r, starters, fld, bat_team, pit_team, name, birth, fallback_pos, team_name):
+def assemble(prefix, league, people, bat_r, pit_r, starters, fld, bat_team, pit_team, name, birth, fallback_pos, team_name,
+             franchise=lambda code: code, roman=lambda p: ("", ""), country=lambda p: ""):
     out = []
     for pid in set(bat_r) | set(pit_r):
         p = people.get(pid, {})
@@ -345,21 +420,21 @@ def assemble(prefix, league, people, bat_r, pit_r, starters, fld, bat_team, pit_
             teams = [(y, t) for (i, y), t in bat_team.items() if i == pid]
         teams.sort()
         last_team = team_name(teams[-1][1]) if teams else ""
-        # 최다 소속 구단(레전드 리그 배정용, KBO 만)
-        most = ""
-        if league == "KBO":
-            cnt = defaultdict(int)
-            for _, t in teams:
-                f = KBO_FRANCHISE.get(t)
-                if f:
-                    cnt[f] += 1
-            most = max(cnt.items(), key=lambda kv: kv[1])[0] if cnt else ""
+        # 최다 소속 구단(레전드 리그 배정용): 현재 구단 계보 기준
+        cnt = defaultdict(int)
+        for _, t in teams:
+            f = franchise(t)
+            if f:
+                cnt[f] += 1
+        most = max(cnt.items(), key=lambda kv: kv[1])[0] if cnt else ""
         by = birth(p) if p else None
         ovr = r["ovr"]
         pot = ovr
         if r["last"] >= 2024 and by and r["last"] - by <= 25:      # 젊은 현역: 성장 여지
             pot = min(97, ovr + 2 * (26 - (r["last"] - by)))
-        out.append([prefix + pid, nm, pos, league, by or 0, ovr, pot, last_team, most, r["first"], r["last"], r["peak"]])
+        rl, rf = roman(p) if p else ("", "")
+        out.append([prefix + pid, nm, pos, league, by or 0, ovr, pot, last_team, most, r["first"], r["last"], r["peak"],
+                    country(p) if p else "", rl, rf])
     return out
 
 
@@ -375,17 +450,101 @@ def dedupe_names(rows):
     return rows
 
 
+def norm_roman(s):
+    """로마자 표기 흔들림 정규화: Hyeon-Jin / Hyun Jin / Shin-Soo / Sin-Su 를 비슷하게"""
+    s = "".join(ch for ch in (s or "").lower() if ch.isalpha())
+    for a, b in (("eo", "u"), ("oo", "u"), ("ou", "u"), ("oh", "o"), ("sh", "s"), ("ch", "c"), ("ae", "e"), ("wo", "u"), ("yu", "u")):
+        s = s.replace(a, b)
+    return s
+
+
+def similar(a, b):
+    """간단한 편집 거리 기반 유사도 (0~1)"""
+    if not a or not b:
+        return 0.0
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return 1 - prev[-1] / max(len(a), len(b))
+
+
+def link_persons(rows):
+    """리그가 다른 같은 사람(류현진 KBO ↔ Hyun Jin Ryu MLB)을 묶어 person 키와 국적을 맞춤.
+    조건: 성 철자(정규화) 같음 + 출생연도 같음 + 이름 철자 유사도 0.6 이상."""
+    groups = defaultdict(list)
+    for r in rows:
+        last, first = norm_roman(r[13]), norm_roman(r[14])
+        if last and r[4]:
+            groups[(last, r[4])].append(r)
+    person = {r[0]: r[0] for r in rows}
+    linked = 0
+    rank = {"KBO": 0, "NPB": 1, "MLB": 2}
+    taken = set()                          # (사람 키, 리그): 한 사람에게 리그당 한 명만
+    for r in rows:
+        taken.add((r[0], r[3]))
+    for g in groups.values():
+        if len({r[3] for r in g}) < 2:
+            continue
+        # NPB → MLB 순으로, 앞선 리그(KBO, NPB)에서 이름이 "가장" 비슷한 한 명과 묶음
+        for b in sorted(g, key=lambda r: rank[r[3]]):
+            cands = [(similar(norm_roman(a[14]), norm_roman(b[14])), a) for a in g
+                     if rank[a[3]] < rank[b[3]] and (person[a[0]], b[3]) not in taken]
+            if not cands:
+                continue
+            sim, a = max(cands, key=lambda c: c[0])
+            if sim >= 0.6:
+                person[b[0]] = person[a[0]]
+                taken.add((person[a[0]], b[3]))
+                linked += 1
+    # 국적: 묶인 사람은 KBO 국적 > NPB > MLB 출생국 순으로 통일 (예: 이정후는 일본 출생이지만 KBO 국적은 한국)
+    order = {"KBO": 0, "NPB": 1, "MLB": 2}
+    best = {}
+    for r in sorted(rows, key=lambda r: order[r[3]]):
+        k = person[r[0]]
+        if r[12] and k not in best:
+            best[k] = r[12]
+    members = defaultdict(int)
+    for k in person.values():
+        members[k] += 1
+    for r in rows:
+        k = person[r[0]]
+        r[12] = best.get(k, r[12])
+        # 일제강점기(1945년 이전) 한국·대만 출생 NPB 선수는 당시 일본 국적 (예: 후지모토 히데오)
+        if r[3] == "NPB" and r[12] in ("KOR", "TPE") and r[4] and r[4] < 1945 and k == r[0]:
+            r[12] = "JPN"
+        r[13] = k if members[k] > 1 else 0      # 혼자인 선수는 키 생략(파일 크기 절약)
+        del r[14]
+    return linked
+
+
 def main():
     rows = build_kbo() + build_npb() + build_mlb()
+    for r in rows:
+        off = LEAGUE_OFFSET[r[3]]
+        r[5] = max(40, r[5] + off)
+        r[6] = max(r[5], r[6] + off)
+    linked = link_persons(rows)
+    print(f"linked {linked} cross-league duplicates", file=sys.stderr)
     rows = dedupe_names(rows)
     rows.sort(key=lambda r: (r[3], -r[5], r[1]))
     header = ("// 선수 DB — tools/build_players.py 로 생성 (직접 수정하지 마세요)\n"
               "// 출처: KBO 공식 기록, NPB 공식/npbstats, MLB Lahman Database (frankmkpark/mnk_datasets 정리본)\n"
-              "// [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, KBO 최다 소속 구단, 첫 시즌, 마지막 시즌, 전성기 시즌]\n")
+              "// [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, 최다 소속 구단(계보), 첫 시즌, 마지막 시즌, 전성기 시즌, 국가, 동일인 키]\n")
     body = "const PLAYERS = [\n" + ",\n".join(json.dumps(r, ensure_ascii=False, separators=(",", ":")) for r in rows) + "\n];\n"
-    teams = ("const KBO_TEAMS = " + json.dumps(["KIA타이거즈", "삼성라이온즈", "LG트윈스", "두산베어스", "KT위즈", "SSG랜더스",
-                                                  "롯데자이언츠", "한화이글스", "NC다이노스", "키움히어로즈"], ensure_ascii=False) + ";\n"
-             "const NPB_TEAMS = [];\nconst MLB_TEAMS = [];\n")
+    leagues = {
+        "KBO": {"name": "KBO 리그", "last": LEAGUE_LAST["KBO"], "groups": ["드림", "나눔"],
+                "teams": [{"name": n, "group": g} for n, g in KBO_GROUP.items()]},
+        "NPB": {"name": "일본 프로야구", "last": LEAGUE_LAST["NPB"], "groups": ["센트럴", "퍼시픽"],
+                "teams": [{"name": NPB_NAME[k], "group": NPB_GROUP[k]} for k in NPB_NAME]},
+        "MLB": {"name": "메이저리그", "last": LEAGUE_LAST["MLB"], "groups": ["아메리칸", "내셔널"],
+                "teams": [{"name": MLB_NAME[k], "group": MLB_GROUP[k]} for k in MLB_NAME]},
+    }
+    teams = ("const LEAGUES = " + json.dumps(leagues, ensure_ascii=False) + ";\n"
+             "const COUNTRY_NAME = " + json.dumps(COUNTRY_NAME, ensure_ascii=False) + ";\n"
+             "const KBO_TEAMS = LEAGUES.KBO.teams.map(t => t.name);\n")
     path = os.path.join(ROOT, "src", "players.js")
     with open(path, "w", encoding="utf-8") as f:
         f.write(header + body + teams)
