@@ -24,6 +24,10 @@ javafx {
 
 dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
+    // Windows 배포판용 JavaFX 네이티브 파일 (Linux 빌드 환경에서도 Windows용 패키지를 만들기 위함)
+    ['javafx-base', 'javafx-graphics', 'javafx-controls', 'javafx-fxml'].each {
+        implementation "org.openjfx:${it}:21:win"
+    }
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -34,5 +38,5 @@ test {
 }
 
 application {
-    mainClass = 'com.baseball9.MainApp'
+    mainClass = 'com.baseball9.Launcher'
 }

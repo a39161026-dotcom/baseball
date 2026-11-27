@@ -2,7 +2,13 @@
 
 실제 경기처럼 투구 단위로 진행되는 야구 시뮬레이션입니다. 감독으로서 작전을 내고, 중계 멘트를 들으며 경기를 운영합니다.
 
-## 실행
+## Windows에서 실행 (가장 간단)
+
+1. JDK 21 설치: https://adoptium.net 에서 Windows x64 `.msi` (Temurin 21) 설치
+2. 배포 zip 압축 풀기
+3. 압축 푼 `baseball9\bin\baseball9.bat` 를 더블클릭
+
+## 실행 (개발용)
 
 ```bash
 gradle run          # 앱 실행
