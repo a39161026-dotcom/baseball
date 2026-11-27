@@ -180,6 +180,8 @@ class GameEngine {
     this.gs = gs; this.rng = makeRng(seed); this.difficulty = difficulty; this.pitchCall = 'AUTO';
     this.pendingBunt = false; this.pendingSteal = -1; this.pendingIbb = false;
     this.queue = []; this.atBatFresh = true; this.decisionAck = false;
+    this.bat = new Map();      // 선수 id -> 이번 경기 타격 기록
+    this.autoMine = false;     // true 면 우리 팀 투수 교체도 코치(AI)가 판단
     const { mine, theirs } = gs;
     mine.lineup.forEach(p => p.setHp(Math.max(40, 100 - p.fatigue)));
     if (!mine.pitcher) mine.pitcher = fallbackPitcher();
@@ -191,6 +193,11 @@ class GameEngine {
   }
 
   get oppMult() { return DIFFICULTY[this.difficulty][0]; }
+
+  stat(p) {
+    if (!this.bat.has(p.id)) this.bat.set(p.id, { pa: 0, ab: 0, h: 0, d2: 0, d3: 0, hr: 0, rbi: 0, bb: 0, k: 0, r: 0 });
+    return this.bat.get(p.id);
+  }
 
   introducePitcher(t, p) {
     p.setHp(Math.max(40, 100 - p.fatigue));
@@ -234,7 +241,8 @@ class GameEngine {
     const off = gs.offense(), dfn = gs.defense();
     const mineBat = gs.top;
 
-    if (this.atBatFresh && mineBat) this.aiPitcherCheck(r);
+    if (this.atBatFresh && mineBat) this.aiPitcherCheck(r, gs.theirs);
+    if (this.atBatFresh && !mineBat && this.autoMine) this.aiPitcherCheck(r, gs.mine);
     if (this.atBatFresh) r.add('NEUTRAL', C.atBatIntro(gs, off.currentBatter(), dfn.pitcher, mineBat));
 
     if (this.atBatFresh && mineBat && this.aiWantsIbb(off)) {
@@ -343,7 +351,7 @@ class GameEngine {
     if (this.rng.random() >= hitP) {
       if (ct === 'GROUND') this.groundOut(r, off, dfn, batter);
       else if (ct === 'FLY') this.flyOut(r, off, dfn, batter);
-      else { this.addOuts(dfn, 1); r.add('OUT', C.lineOut()); }
+      else { this.addOuts(dfn, 1); const st = this.stat(batter); st.pa++; st.ab++; r.add('OUT', C.lineOut()); }
       return;
     }
     const hr = clamp(0.18 + 0.14 * sb - 0.05 * sp, 0.05, 0.35);
@@ -364,6 +372,9 @@ class GameEngine {
     else if (kind === 'TRIPLE') { adv = [3, 2, 1]; batterAdv = 3; }
     else { adv = [3, 2, 1]; batterAdv = 4; }
     const scorers = this.advance(adv, batter, batterAdv);
+    const st = this.stat(batter);
+    st.pa++; st.ab++; st.h++; st.rbi += scorers.length;
+    if (kind === 'DOUBLE') st.d2++; else if (kind === 'TRIPLE') st.d3++; else if (kind === 'HOMER') st.hr++;
     off.hits++;
     dfn.currentLine().hits++;
     r.add('HIT', C.hit(kind, this.rng, batter));
@@ -393,6 +404,8 @@ class GameEngine {
 
   groundOut(r, off, dfn, batter) {
     const rn = this.gs.runners, before = this.gs.outs;
+    const st = this.stat(batter);
+    st.pa++; st.ab++;
     if (rn[0] && before <= 1 && this.rng.random() < 0.40) {          // 병살
       const runner = rn[0];
       rn[0] = null;
@@ -415,20 +428,25 @@ class GameEngine {
     if (rn[2] && before < 2 && this.rng.random() < 0.10) { scorers.push(rn[2]); rn[2] = null; }
     if (rn[1] && !rn[2] && this.rng.random() < 0.25) { rn[2] = rn[1]; rn[1] = null; }
     if (rn[0] && !rn[1] && this.rng.random() < 0.20) { rn[1] = rn[0]; rn[0] = null; }
+    st.rbi += scorers.length;
     r.add('OUT', C.groundOut(this.rng));
     this.scoreRuns(r, scorers);
   }
 
   flyOut(r, off, dfn, batter) {
     const rn = this.gs.runners, before = this.gs.outs;
+    const st = this.stat(batter);
+    st.pa++;
     this.addOuts(dfn, 1);
     if (rn[2] && before < 2 && this.rng.random() < 0.55) {
+      st.rbi++;                         // 희생플라이: 타수 아님, 타점 1
       const runner = rn[2];
       rn[2] = null;
       r.add('OUT', C.sacFly(runner));
       this.scoreRuns(r, [runner]);
       return;
     }
+    st.ab++;
     r.add('OUT', C.flyOut(this.rng));
   }
 
@@ -439,6 +457,8 @@ class GameEngine {
     else if (!rn[2]) { rn[2] = rn[1]; rn[1] = rn[0]; rn[0] = batter; }
     else { scorers.push(rn[2]); rn[2] = rn[1]; rn[1] = rn[0]; rn[0] = batter; }
     dfn.currentLine().walks++;
+    const st = this.stat(batter);
+    st.pa++; st.bb++; st.rbi += scorers.length;
     r.add('WALK', intentional ? C.ibb(batter) : C.walk(batter));
     this.scoreRuns(r, scorers);
   }
@@ -449,6 +469,8 @@ class GameEngine {
   }
 
   strikeout(r, dfn, batter, called) {
+    const st = this.stat(batter);
+    st.pa++; st.ab++; st.k++;
     this.addOuts(dfn, 1);
     dfn.currentLine().strikeouts++;
     r.add('OUT', C.strikeout(this.rng, batter, called));
@@ -474,6 +496,8 @@ class GameEngine {
       let scorers = rn[2] ? [rn[2]] : [];
       if (before >= 2) scorers = [];
       this.gs.runners = [null, rn[0], rn[1]];
+      const st = this.stat(batter);
+      st.pa++; st.rbi += scorers.length;   // 희생번트: 타수 아님
       r.add('OUT', C.sacBunt(batter));
       this.scoreRuns(r, scorers);
       return true;
@@ -486,6 +510,8 @@ class GameEngine {
       return false;
     }
     this.addOuts(dfn, 1);
+    const st = this.stat(batter);
+    st.pa++; st.ab++;
     r.add('OUT', C.buntPop());
     return true;
   }
@@ -495,6 +521,7 @@ class GameEngine {
   scoreRuns(r, scorers) {
     if (!scorers.length) return;
     const off = this.gs.offense(), dfn = this.gs.defense(), n = scorers.length;
+    scorers.forEach(p => { this.stat(p).r++; });
     off.score += n;
     off.addInningRuns(this.gs.inning, n);
     dfn.currentLine().runs += n;
@@ -538,14 +565,18 @@ class GameEngine {
 
   endGame(r) { this.gs.done = true; r.gameOver = true; r.add('END', C.gameEnd(this.gs)); }
 
-  aiPitcherCheck(r) {
-    const t = this.gs.theirs, p = t.pitcher, line = t.currentLine();
+  aiPitcherCheck(r, t) {
+    const p = t.pitcher, line = t.currentLine();
     if (!p || !line) return;
     if (!(p.hp <= 35 || line.pitches >= 100)) return;
-    const pen = t.bullpen();
-    if (!pen.length) return;
+    const all = t.bullpen();
+    if (!all.length) return;
+    // 불펜(RP) 우선, 지친 투수는 피함. 다른 날 선발을 위해 SP는 불펜이 없을 때만 사용
+    const rp = all.filter(x => x.pos === 'RP');
+    const fresh = rp.filter(x => x.fatigue < 40);
+    const pen = fresh.length ? fresh : rp.length ? rp : all;
     const nxt = pen.reduce((a, b) => (b.effOvr > a.effOvr ? b : a));
-    r.add('MANAGER', C.aiPitcherChange(p, nxt));
+    r.add('MANAGER', t === this.gs.mine ? `📋 코치 판단, 투수 교체: ${C.nm(p)} → ${C.nm(nxt)}` : C.aiPitcherChange(p, nxt));
     this.introducePitcher(t, nxt);
   }
 
@@ -681,7 +712,8 @@ function buildOppRoster(all, excludeIds, rng) {
 
 function updateDailyCondition(roster, rng) {
   roster.forEach(p => {
-    p.setFatigue(p.fatigue - rng.randrange(8) - 3);
+    // 하루 회복: 투수는 등판 간격이 있어 회복이 빠름(10~16), 야수는 3~10
+    p.setFatigue(p.fatigue - (p.isPitcher ? 10 + rng.randrange(7) : 3 + rng.randrange(8)));
     const roll = rng.random();
     if (roll < 0.04) p.setFatigue(p.fatigue + rng.randrange(16) + 15);
     else if (roll < 0.08) p.setFatigue(p.fatigue - rng.randrange(11) - 10);
@@ -691,171 +723,15 @@ function updateDailyCondition(roster, rng) {
 function applyPostGameFatigue(team, rng) {
   team.lineup.forEach(p => p.setFatigue(p.fatigue + 4 + rng.randrange(6)));
   team.pitcherLines.forEach(l => {
-    const rate = l.pitcher.pos === 'SP' ? 0.25 : 0.40;
-    l.pitcher.setFatigue(l.pitcher.fatigue + Math.round(l.pitches * rate));
+    // 선발: 100구 던지면 피로 45 → 4~5일 휴식 / 불펜: 등판만 해도 몸 풀기 피로 12 + 투구 수
+    const add = l.pitcher.pos === 'SP' ? Math.round(l.pitches * 0.45) : 12 + Math.round(l.pitches * 0.5);
+    l.pitcher.setFatigue(l.pitcher.fatigue + add);
   });
 }
 
 const opponentNames = () => [...KBO_TEAMS, ...NPB_TEAMS, ...MLB_TEAMS];
 
-// ── 서비스 (Flask API와 같은 형태) ───────────────────────
-function createService(seed) {
-  const rng = makeRng(seed);
-  const league = { allPlayers: buildAllPlayers(), teamName: '나의 팀', roster: [], wins: 0, losses: 0, recent: [] };
-  const games = new Map();
-
-  function resetLeague(lo, hi) {
-    league.roster = buildAutoRoster(league.allPlayers, lo, hi, rng);
-    league.wins = 0; league.losses = 0; league.recent = [];
-    updateDailyCondition(league.roster, rng);
-  }
-  resetLeague(75, 85);
-
-  const find = (players, id) => players.find(p => p.id === id) || null;
-  const pdict = (p, l) => {
-    const d = p.toDict();
-    if (l) Object.assign(d, { pitches: l.pitches, inn: l.inningsText, hits: l.hits, runs: l.runs, walks: l.walks, ks: l.strikeouts });
-    d.posLabel = POS_LABEL[p.pos] || p.pos;
-    return d;
-  };
-  const ls = (t, cols) => [...t.runsByInning, ...Array(cols - t.runsByInning.length).fill(null)];
-
-  function stateDict(g) {
-    const { gs, engine: e } = g, { mine, theirs } = gs;
-    const cols = Math.max(9, mine.runsByInning.length, theirs.runsByInning.length);
-    const curSlot = gs.top ? mine.currentSlot : -1;
-    const batter = gs.offense().currentBatter();
-    const needs = e.needsDecision();
-    const d = {
-      gameId: g.id, opponent: gs.opponent, myName: mine.name, inning: gs.inning, top: gs.top,
-      outs: gs.outs, balls: gs.balls, strikes: gs.strikes,
-      runners: gs.runners.map(r => (r ? r.name : null)),
-      score: { mine: mine.score, theirs: theirs.score }, hits: { mine: mine.hits, theirs: theirs.hits },
-      innings: cols, linescore: { mine: ls(mine, cols), theirs: ls(theirs, cols) },
-      pitchTotal: gs.pitchTotal, done: gs.done, difficulty: e.difficulty,
-      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), current: i === curSlot })),
-      batter: batter ? pdict(batter) : null,
-      myPitcher: mine.pitcher ? pdict(mine.pitcher, mine.currentLine()) : null,
-      oppPitcher: theirs.pitcher ? pdict(theirs.pitcher, theirs.currentLine()) : null,
-      needsDecision: needs, decisionKind: needs ? (gs.top ? 'offense' : 'defense') : null,
-      stealable: e.stealableBases(), canBunt: e.canBunt(), canIbb: e.canIbb(),
-      bench: gs.top && !gs.done ? mine.bench().map(p => pdict(p)) : [],
-      bullpen: !gs.top && !gs.done ? mine.bullpen().map(p => pdict(p)) : [],
-      pitchCall: e.pitchCall, pitchCalls: Object.entries(PITCH_CALLS).map(([id, label]) => ({ id, label })),
-      record: { wins: league.wins, losses: league.losses }, defending: gs.defense().name,
-    };
-    if (gs.done) d.box = { mine: mine.pitcherLines.map(l => pdict(l.pitcher, l)), theirs: theirs.pitcherLines.map(l => pdict(l.pitcher, l)) };
-    return d;
-  }
-
-  const linesOut = lines => lines.map(([kind, text]) => ({ kind, text }));
-
-  function recordResult(g) {
-    if (g.finished) return;
-    g.finished = true;
-    const gs = g.gs, win = gs.mine.score > gs.theirs.score;
-    if (win) league.wins++; else league.losses++;
-    league.recent.push({ opponent: gs.opponent, result: win ? '승' : '패', score: `${gs.mine.score}:${gs.theirs.score}` });
-    applyPostGameFatigue(gs.mine, rng);
-  }
-
-  const leagueView = () => ({
-    teamName: league.teamName, record: { wins: league.wins, losses: league.losses },
-    roster: league.roster.map(p => p.toDict()), recent: league.recent.slice(-5),
-    opponents: opponentNames(), difficulties: Object.entries(DIFFICULTY).map(([id, v]) => ({ id, label: v[1] })),
-  });
-
-  function newGame(body) {
-    const opp = body.opponent || opponentNames()[0];
-    const difficulty = body.difficulty || 'NORMAL';
-    if (!DIFFICULTY[difficulty]) return [400, { error: '난이도가 올바르지 않습니다.' }];
-    const roster = league.roster;
-    const pitchers = roster.filter(p => p.isPitcher);
-    if (!pitchers.length) return [400, { error: '투수가 1명 이상 필요합니다.' }];
-    let lineup;
-    if (body.lineup && body.lineup.length) {
-      lineup = body.lineup.map(id => find(roster, id));
-      if (lineup.length !== 9 || lineup.some(p => !p || p.isPitcher)) return [400, { error: '타순은 야수 9명이어야 합니다.' }];
-    } else {
-      lineup = roster.filter(p => !p.isPitcher).sort((a, b) => b.effOvr - a.effOvr).slice(0, 9);
-    }
-    if (lineup.length < 9) return [400, { error: '타순은 야수 9명이 필요합니다.' }];
-    let starter = body.starter ? find(roster, body.starter) : null;
-    if (!starter || !starter.isPitcher) {
-      starter = [...pitchers].sort((a, b) => (a.pos !== 'SP') - (b.pos !== 'SP') || a.fatigue - b.fatigue)[0];
-    }
-    const oppRoster = buildOppRoster(league.allPlayers, new Set(roster.map(p => p.id)), rng);
-    const oppLineup = oppRoster.filter(p => !p.isPitcher).sort((a, b) => b.ovr - a.ovr).slice(0, 9);
-    if (oppLineup.length < 9) return [400, { error: '상대 팀 타자가 부족합니다.' }];
-    const oppStarter = oppRoster.find(p => p.pos === 'SP') || oppRoster.find(p => p.isPitcher) || null;
-
-    const gs = new GameState(league.teamName, opp);
-    gs.mine.lineup = [...lineup]; gs.mine.roster = [...roster]; gs.mine.pitcher = starter;
-    gs.theirs.lineup = oppLineup; gs.theirs.roster = oppRoster; gs.theirs.pitcher = oppStarter;
-    const engine = new GameEngine(gs, { seed: rng.randrange(2 ** 31), difficulty });
-    const g = { id: newId() + newId(), gs, engine, finished: false };
-    games.set(g.id, g);
-    return [200, { state: stateDict(g), lines: linesOut(engine.drainQueue()) }];
-  }
-
-  function advance(id, body) {
-    const g = games.get(id);
-    if (!g) return [404, { error: '경기를 찾을 수 없습니다.' }];
-    const mode = { pitch: MODE.PITCH, atbat: MODE.AT_BAT, inning: MODE.HALF, game: MODE.GAME }[body.mode] || MODE.PITCH;
-    const stop = !!body.stopAtDecision;
-    if (body.ack) g.engine.ackDecision();
-    if (g.gs.done) return [200, { state: stateDict(g), lines: [], paused: false }];
-    if (stop && g.engine.needsDecision()) return [200, { state: stateDict(g), lines: [], paused: true }];
-    const res = g.engine.run(mode, stop);
-    const lines = g.engine.drainQueue();
-    if (res.gameOver) recordResult(g);
-    return [200, { state: stateDict(g), lines: linesOut([...lines, ...res.lines]), paused: false, gameOver: res.gameOver }];
-  }
-
-  function order(id, body) {
-    const g = games.get(id);
-    if (!g) return [404, { error: '경기를 찾을 수 없습니다.' }];
-    const { engine: e, gs } = g;
-    let ok;
-    switch (body.type) {
-      case 'bunt': ok = e.requestBunt(); break;
-      case 'steal': ok = e.requestSteal(Number(body.base)); break;
-      case 'ibb': ok = e.requestIbb(); break;
-      case 'pinch_hit': { const s = find(gs.mine.roster, body.id); ok = !!s && e.requestPinchHit(s); break; }
-      case 'pinch_run': { const s = find(gs.mine.roster, body.id); ok = !!s && e.requestPinchRun(Number(body.base), s); break; }
-      case 'pitcher': { const n = find(gs.mine.roster, body.id); ok = !!n && e.requestPitcherChange(n); break; }
-      case 'pitch_call': ok = e.setPitchCall(body.call); break;
-      default: return [400, { error: '알 수 없는 지시입니다.' }];
-    }
-    const lines = e.drainQueue();
-    if (!ok) return [409, { error: '지금은 이 지시를 낼 수 없습니다.', state: stateDict(g) }];
-    return [200, { state: stateDict(g), lines: linesOut(lines) }];
-  }
-
-  function dispatch(method, path, body = {}) {
-    const parts = path.split('?')[0].split('/').filter(Boolean);
-    let res;
-    if (parts[0] !== 'api') res = [404, { error: 'not found' }];
-    else if (method === 'GET' && parts.join('/') === 'api/league') res = [200, leagueView()];
-    else if (method === 'POST' && parts.join('/') === 'api/league/reset') {
-      resetLeague(Number(body.minOvr ?? 75), Number(body.maxOvr ?? 85));
-      res = [200, leagueView()];
-    } else if (method === 'POST' && parts.join('/') === 'api/game') res = newGame(body);
-    else if (parts[1] === 'game' && parts.length >= 3) {
-      const id = parts[2];
-      if (method === 'GET' && parts.length === 3) {
-        const g = games.get(id);
-        res = g ? [200, { state: stateDict(g), lines: [] }] : [404, { error: '경기를 찾을 수 없습니다.' }];
-      } else if (method === 'POST' && parts[3] === 'advance') res = advance(id, body);
-      else if (method === 'POST' && parts[3] === 'order') res = order(id, body);
-      else res = [404, { error: 'not found' }];
-    } else res = [404, { error: 'not found' }];
-    return { status: res[0], payload: res[1] };
-  }
-
-  return { dispatch, league, games };
-}
-
 if (typeof module !== 'undefined') {
-  module.exports = { createService, GameEngine, GameState, Player, MODE, makeRng };
+  module.exports = { GameEngine, GameState, TeamState, Player, MODE, makeRng, C, DIFFICULTY, PITCH_CALLS, POS_LABEL,
+    buildAllPlayers, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
 }

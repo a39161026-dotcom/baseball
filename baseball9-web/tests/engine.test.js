@@ -97,31 +97,74 @@ test('도루 로그에 주자 이름이 있고 성공/실패 중 하나', () => 
   assert.ok(checked > 0);
 });
 
-test('서비스: 경기 생성 → 끝까지 → 전적 반영', () => {
-  const svc = createService(42);
-  const lg = svc.dispatch('GET', '/api/league').payload;
-  assert.strictEqual(lg.roster.length, 15);
-  const r = svc.dispatch('POST', '/api/game', { opponent: 'NC다이노스' });
-  assert.strictEqual(r.status, 200);
-  const id = r.payload.state.gameId;
-  const end = svc.dispatch('POST', `/api/game/${id}/advance`, { mode: 'game', ack: true });
-  assert.ok(end.payload.state.done);
-  assert.ok(end.payload.state.box.mine.length >= 1);
-  const rec = svc.dispatch('GET', '/api/league').payload.record;
-  assert.strictEqual(rec.wins + rec.losses, 1);
-  assert.strictEqual(svc.dispatch('GET', '/api/game/nope').status, 404);
-  assert.strictEqual(svc.dispatch('POST', `/api/game/${id}/order`, { type: 'x' }).status, 400);
+test('시즌: 10개 구단, 하루 5경기, 모든 팀 하루 1경기', () => {
+  const svc = createService(11);
+  const st = svc.state;
+  assert.strictEqual(st.teams.length, 10);
+  assert.strictEqual(st.schedule.length, 36);
+  st.schedule.forEach(day => {
+    assert.strictEqual(day.length, 5);
+    assert.strictEqual(new Set(day.flat()).size, 10);
+  });
+  assert.ok(st.teams[0].roster.filter(p => !p.isPitcher).length >= 9);
+  st.teams.forEach(t => assert.ok(t.roster.filter(p => !p.isPitcher).length >= 9 && t.roster.some(p => p.isPitcher)));
 });
 
-test('서비스: 자동 진행은 판단 지점에서 멈춤', () => {
-  const svc = createService(7);
-  const id = svc.dispatch('POST', '/api/game', {}).payload.state.gameId;
-  let paused = false;
-  for (let i = 0; i < 500 && !paused; i++) {
-    const b = svc.dispatch('POST', `/api/game/${id}/advance`, { mode: 'pitch', stopAtDecision: true }).payload;
-    paused = b.paused;
-  }
-  assert.ok(paused);
+test('시즌: 끝까지 자동 진행 시 기록이 서로 맞음', () => {
+  const svc = createService(12);
+  const r = svc.dispatch('POST', '/api/season/quick', { days: 100 });
+  const s = r.payload.season;
+  assert.ok(s.done);
+  assert.ok(s.champion);
+  const W = s.standings.reduce((a, t) => a + t.w, 0), L = s.standings.reduce((a, t) => a + t.l, 0);
+  assert.strictEqual(W, 5 * 36); assert.strictEqual(L, 5 * 36);
+  const st = svc.state;
+  const rs = st.teams.reduce((a, t) => a + t.rs, 0);
+  const batR = Object.values(st.stats).reduce((a, x) => a + (x.bat ? x.bat.r : 0), 0);
+  const pitR = Object.values(st.stats).reduce((a, x) => a + (x.pit ? x.pit.r : 0), 0);
+  const pitW = Object.values(st.stats).reduce((a, x) => a + (x.pit ? x.pit.w : 0), 0);
+  assert.strictEqual(batR, rs, '타자 득점 합 = 팀 득점 합');
+  assert.strictEqual(pitR, rs, '투수 실점 합 = 팀 득점 합');
+  assert.strictEqual(pitW, 5 * 36, '승리 투수 수 = 경기 수');
+  const stats = svc.dispatch('GET', '/api/stats').payload;
+  assert.ok(stats.leaders.hr.length === 5 && stats.leaders.avg.length > 0 && stats.leaders.era.length > 0);
+  const lgAvg = stats.leaders.avg[0].avg;
+  assert.ok(lgAvg > 0.25 && lgAvg < 0.5, '타격 1위 타율이 현실 범위: ' + lgAvg);
+  assert.strictEqual(svc.dispatch('POST', '/api/game', {}).status, 409, '시즌 종료 후 경기 불가');
+});
+
+test('시즌: 직접 지휘한 경기도 하루를 진행시키고 전적 반영', () => {
+  const svc = createService(13);
+  const g = svc.dispatch('POST', '/api/game', {}).payload;
+  const id = g.state.gameId;
+  const end = svc.dispatch('POST', `/api/game/${id}/advance`, { mode: 'game', ack: true }).payload;
+  assert.ok(end.state.done);
+  assert.ok(end.state.batBox.length === 9);
+  const season = svc.dispatch('GET', '/api/season').payload;
+  assert.strictEqual(season.day, 1);
+  assert.strictEqual(season.standings.reduce((a, t) => a + t.w + t.l, 0), 10);
+  const again = svc.dispatch('POST', `/api/game/${id}/advance`, { mode: 'game' }).payload;
+  assert.strictEqual(svc.dispatch('GET', '/api/season').payload.day, 1, '끝난 경기를 다시 진행해도 하루가 두 번 넘어가지 않음');
+});
+
+test('훈련과 저장/불러오기', () => {
+  const svc = createService(14);
+  const p = svc.state.teams[0].roster.find(x => x.ovr < x.potential);
+  const before = p.ovr, tp = svc.state.tp;
+  const r = svc.dispatch('POST', '/api/train', { id: p.id, kind: 'ovr' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(p.ovr, before + 1);
+  assert.strictEqual(svc.state.tp, tp - 3);
+  svc.dispatch('POST', '/api/season/quick', { days: 5 });
+  const saved = JSON.parse(JSON.stringify(svc.exportState()));
+  const svc2 = createService(99);
+  assert.ok(svc2.importState(saved));
+  const a = svc.dispatch('GET', '/api/season').payload, b = svc2.dispatch('GET', '/api/season').payload;
+  assert.strictEqual(JSON.stringify(b.standings), JSON.stringify(a.standings));
+  assert.strictEqual(b.day, 5);
+  assert.strictEqual(JSON.stringify(svc2.dispatch('GET', '/api/stats').payload.leaders.hr), JSON.stringify(svc.dispatch('GET', '/api/stats').payload.leaders.hr));
+  assert.strictEqual(svc2.dispatch('POST', '/api/game', {}).status, 200, '불러온 뒤 경기 진행 가능');
+  assert.ok(JSON.stringify(saved).length < 200 * 1024, '저장 크기가 문서 한도 안');
 });
 
 test('밸런스: 팀당 득점이 현실 범위', () => {

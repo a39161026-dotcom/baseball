@@ -6,7 +6,7 @@ const src = f => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
 const strip = js => js.replace(/if \(typeof module !== 'undefined'\) \{[\s\S]*?\}\s*$/, '');
 let html = src('play.src.html')
   .replace('/*__PLAYERS__*/', () => src('players.js'))
-  .replace('/*__ENGINE__*/', () => strip(src('engine.js')));
+  .replace('/*__ENGINE__*/', () => strip(src('engine.js')) + '\n' + strip(src('season.js')));
 fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'dist', 'play.html'), html);
 fs.writeFileSync(path.join(__dirname, 'dist', 'preview.html'),

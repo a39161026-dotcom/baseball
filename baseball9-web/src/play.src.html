@@ -120,30 +120,96 @@
     .controls .group { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+  /* 탭 + 시즌 화면 */
+  nav.tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px; }
+  nav.tabs button { min-height: 40px; padding: 6px 4px; font-size: 13px; background: var(--panel); border-color: var(--line); }
+  nav.tabs button[aria-current="page"] { background: var(--panel-2); color: var(--gold); border-color: var(--gold); font-weight: 700; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+  .today { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; text-align: center; margin-block: 8px 12px; }
+  .today .tn { font-weight: 700; font-size: 15px; }
+  .today .str { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .today .vs { color: var(--gold); font-weight: 800; font-size: 18px; }
+  .stand td, .stand th { font-size: 13px; padding: 5px 6px; white-space: nowrap; }
+  .stand td.t { text-align: left; white-space: nowrap; }
+  .stand tr.me td { color: var(--gold); font-weight: 700; }
+  .stats td, .stats th { font-size: 12.5px; padding: 4px 6px; white-space: nowrap; }
+  .stats td.t { text-align: left; }
+  .leaders { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .leaders .panel { margin: 0; }
+  .leaders ol { padding-left: 20px; font-size: 13px; }
+  .leaders li span { color: var(--dim); }
+  .champ { background: linear-gradient(180deg, #3a2a07, var(--panel)); border-color: var(--gold); }
+  .train-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding-block: 8px; border-bottom: 1px solid var(--line); }
+  .train-row:last-child { border-bottom: 0; }
+  .train-row .nm { font-weight: 600; }
+  .train-row .sub { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .savebar { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .newsline { font-size: 13px; padding-block: 2px; font-variant-numeric: tabular-nums; }
 </style>
 
 <header>
   <h1>⚾ 야구9단 매니저</h1>
-  <span class="info" id="teamInfo"></span>
+  <span class="info" id="seasonInfo"></span>
   <span class="spacer"></span>
   <span class="info" id="recordInfo"></span>
 </header>
 
 <main>
-  <!-- 셋업 -->
-  <section id="setup">
-    <div class="panel">
-      <p class="title">📋 로스터 구성</p>
-      <div class="row">
-        <label class="lbl" for="strength">선수 강도</label>
-        <select id="strength">
-          <option value="65,75">약체 (OVR 65~75)</option>
-          <option value="75,85" selected>중위권 (OVR 75~85)</option>
-          <option value="85,95">강팀 (OVR 85~95)</option>
-        </select>
-        <button id="btnReset">새 로스터 구성</button>
+  <nav class="tabs" aria-label="메뉴">
+    <button data-tab="home">🏠 홈</button>
+    <button data-tab="play">⚾ 경기</button>
+    <button data-tab="stand">📊 순위</button>
+    <button data-tab="stats">📈 기록</button>
+    <button data-tab="train">💪 훈련</button>
+  </nav>
+
+  <!-- 홈 -->
+  <section id="home">
+    <div class="panel" id="todayPanel">
+      <p class="title" id="dayTitle"></p>
+      <div class="today">
+        <div><div class="tn">나의 팀</div><div class="str" id="myStr"></div></div>
+        <div class="vs">VS</div>
+        <div><div class="tn" id="oppName"></div><div class="str" id="oppStr"></div></div>
       </div>
-      <div class="grid2" style="margin-top:12px">
+      <div class="controls"><div class="group">
+        <button class="gold" id="goPlay">⚾ 경기 지휘하기</button>
+        <button id="quick1">⏩ 오늘 경기 자동</button>
+        <button id="quick7">⏭ 7일 자동 진행</button>
+      </div></div>
+      <div class="savebar" id="saveStatus"></div>
+    </div>
+    <div class="panel champ" id="champPanel" hidden>
+      <p class="title" id="champTitle"></p>
+      <p id="champText" style="margin:0 0 10px"></p>
+      <button class="gold" id="nextSeason">다음 시즌 시작 (선수·능력치 유지)</button>
+    </div>
+    <div class="grid2">
+      <div class="panel"><p class="title">최근 우리 경기</p><div id="recentList" class="muted"></div></div>
+      <div class="panel"><p class="title">오늘 다른 구장</p><div id="newsList" class="muted"></div></div>
+    </div>
+    <div class="panel"><p class="title">순위 (상위 5)</p><div class="scroll-x"><table class="stand" id="miniStand"></table></div></div>
+    <div class="panel">
+      <p class="title">⚙️ 새 리그 시작</p>
+      <div class="row">
+        <label class="lbl" for="lenSel">경기 수</label>
+        <select id="lenSel"><option value="18">18경기</option><option value="36" selected>36경기</option><option value="72">72경기</option><option value="144">144경기</option></select>
+        <label class="lbl" for="strength">우리 팀 강도</label>
+        <select id="strength"><option value="65,75">약체</option><option value="75,85" selected>중위권</option><option value="85,95">강팀</option></select>
+        <label class="lbl" for="diffSel">난이도</label>
+        <select id="diffSel"><option value="EASY">쉬움</option><option value="NORMAL" selected>보통</option><option value="HARD">어려움</option></select>
+        <button id="btnNewLeague">새 리그 시작</button>
+      </div>
+      <p class="muted" style="margin:8px 0 0">새 리그를 시작하면 지금 시즌 기록이 지워집니다. 버튼을 한 번 더 눌러야 시작됩니다.</p>
+    </div>
+  </section>
+
+  <!-- 경기: 준비 -->
+  <section id="setup" hidden>
+    <div class="panel">
+      <p class="title" id="setupTitle"></p>
+      <div class="grid2">
         <div>
           <p class="lbl">타순 (▲▼로 순서 변경)</p>
           <ol id="lineupEdit" style="padding-left:20px"></ol>
@@ -151,29 +217,20 @@
           <div id="benchList" class="side"></div>
         </div>
         <div>
-          <label class="lbl" for="starterSel">선발 투수</label>
+          <label class="lbl" for="starterSel">선발 투수 (피로가 낮을수록 좋음)</label>
           <select id="starterSel" style="width:100%;margin-top:4px"></select>
           <p class="lbl" style="margin-top:12px">투수진</p>
           <div id="pitchList" class="side"></div>
         </div>
       </div>
-    </div>
-    <div class="panel">
-      <p class="title">🎮 경기 설정</p>
-      <div class="row">
-        <label class="lbl" for="oppSel">상대팀</label><select id="oppSel" style="min-width:180px"></select>
-        <label class="lbl" for="diffSel">난이도</label><select id="diffSel"></select>
+      <div class="row" style="margin-top:12px">
         <button class="gold" id="btnStart">▶ 경기 시작</button>
+        <button id="btnAutoLineup">타순 자동</button>
       </div>
-      <p class="muted" id="setupMsg" style="margin:10px 0 0"></p>
-    </div>
-    <div class="panel">
-      <p class="title">최근 경기</p>
-      <div id="recent" class="muted">아직 경기 기록이 없습니다.</div>
     </div>
   </section>
 
-  <!-- 경기 -->
+  <!-- 경기: 진행 -->
   <section id="game" hidden>
     <div class="board">
       <div class="teams">
@@ -186,9 +243,7 @@
       <div class="state" id="sbState"></div>
       <div class="scroll-x"><table class="linescore" id="linescore"></table></div>
     </div>
-
     <div class="banner" id="banner"></div>
-
     <div class="gameLayout">
       <div style="min-width:0">
         <canvas id="field"></canvas>
@@ -203,7 +258,6 @@
         <div id="oppPitcher"></div>
       </div>
     </div>
-
     <div class="panel controls" style="margin-top:12px">
       <p class="title">진행</p>
       <div class="group">
@@ -216,7 +270,7 @@
           <option value="900" selected>보통</option>
           <option value="400">빠르게</option>
         </select>
-        <button class="end" id="btnGame">🏁 끝까지</button>
+        <button class="end" id="btnGame">🏁 끝까지 (코치에게)</button>
       </div>
       <p class="title" style="margin-top:14px">감독 지시</p>
       <div class="group">
@@ -231,21 +285,41 @@
     </div>
   </section>
 
-  <!-- 결과 -->
+  <!-- 경기: 결과 -->
   <section id="result" hidden>
     <div class="panel" style="text-align:center">
       <div id="resTitle" style="font-size:32px;font-weight:800"></div>
       <div id="resScore" style="font-size:18px;margin-top:6px"></div>
       <div id="resDetail" class="muted" style="margin-top:4px"></div>
       <div class="scroll-x" style="margin:12px 0"><table class="linescore" id="resLinescore"></table></div>
+      <div class="panel box scroll-x" style="text-align:left"><p class="title">🏏 우리 타자</p><table class="stats" id="boxBat"></table></div>
       <div class="grid2" style="text-align:left">
-        <div class="panel box scroll-x"><p class="title" id="boxMineTitle"></p><table id="boxMine"></table></div>
-        <div class="panel box scroll-x"><p class="title" id="boxTheirsTitle"></p><table id="boxTheirs"></table></div>
+        <div class="panel box scroll-x"><p class="title" id="boxMineTitle"></p><table class="stats" id="boxMine"></table></div>
+        <div class="panel box scroll-x"><p class="title" id="boxTheirsTitle"></p><table class="stats" id="boxTheirs"></table></div>
       </div>
-      <div class="row" style="justify-content:center;margin-top:8px">
-        <button id="btnBack">← 로스터로</button>
-        <button class="gold" id="btnAgain">다시 경기 ▶</button>
-      </div>
+      <div class="panel" style="text-align:left"><p class="title">오늘 다른 구장</p><div id="resNews" class="muted"></div></div>
+      <button class="gold" id="btnHome">🏠 홈으로</button>
+    </div>
+  </section>
+
+  <!-- 순위 -->
+  <section id="stand" hidden>
+    <div class="panel"><p class="title" id="standTitle"></p><div class="scroll-x"><table class="stand" id="fullStand"></table></div></div>
+  </section>
+
+  <!-- 기록 -->
+  <section id="stats" hidden>
+    <div class="leaders" id="leaders"></div>
+    <div class="panel" style="margin-top:12px"><p class="title">🏏 우리 팀 타자</p><div class="scroll-x"><table class="stats" id="myBat"></table></div></div>
+    <div class="panel"><p class="title">⚾ 우리 팀 투수</p><div class="scroll-x"><table class="stats" id="myPit"></table></div></div>
+  </section>
+
+  <!-- 훈련 -->
+  <section id="train" hidden>
+    <div class="panel">
+      <p class="title" id="tpTitle"></p>
+      <p class="muted" style="margin:0 0 6px">경기를 하면 훈련 포인트가 쌓입니다 (승리 3, 패배 2). 능력치 훈련은 잠재력까지만 오르고 피로가 조금 쌓입니다.</p>
+      <div id="trainList"></div>
     </div>
   </section>
 </main>
@@ -259,15 +333,15 @@
 (() => {
   const SERVICE = createService();
   const $ = id => document.getElementById(id);
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let league = null, gameId = null, state = null, autoTimer = null, ackNext = false, manualLineup = null, toastTimer = null;
+  let currentTab = 'home', touched = false;
 
-  // 서버 대신 페이지 안의 엔진을 호출합니다 (API 모양은 Flask 버전과 같음)
   function api(method, url, body) {
     const r = SERVICE.dispatch(method, url, body || {});
     if (r.status >= 400) throw new Error(r.payload.error || ('요청 실패 ' + r.status));
     return r.payload;
   }
-
   function toast(msg) {
     const t = $('toast');
     t.textContent = msg; t.hidden = false;
@@ -275,17 +349,150 @@
     toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
   }
 
-  function showSection(name) {
-    ['setup', 'game', 'result'].forEach(s => { $(s).hidden = s !== name; });
-    window.scrollTo(0, 0);
+  // ── 저장 (로그인한 사람별 개인 저장소, 없으면 이 브라우저) ──
+  const LS_KEY = 'baseball9-season-v1';
+  let db = null, uid = null, saving = Promise.resolve();
+  const setSave = t => { $('saveStatus').textContent = t; };
+  function save() {
+    if (!SERVICE.isDirty()) return;
+    const json = JSON.stringify(SERVICE.exportState());
+    SERVICE.markSaved();
+    saving = saving.then(async () => {
+      try {
+        if (db && uid) await db.doc('data/users/' + uid + '/season').set({ v: 1, json });
+        else localStorage.setItem(LS_KEY, json);
+        setSave(db && uid ? '💾 자동 저장됨 (내 계정)' : '💾 자동 저장됨 (이 브라우저)');
+      } catch (e) {
+        setSave('⚠️ 저장하지 못했습니다. 다음 경기 후 다시 저장합니다.');
+      }
+    });
+  }
+  function tryImport(json) {
+    if (!json || touched) return false;
+    try { return SERVICE.importState(JSON.parse(json)); } catch (e) { return false; }
+  }
+  async function initStore() {
+    let loaded = false;
+    try { loaded = tryImport(localStorage.getItem(LS_KEY)); } catch (e) { /* 저장소 차단 */ }
+    if (loaded) refreshAll();
+    try {
+      if (window.claude && window.claude.use) {
+        const user = await window.claude.use('user');
+        db = await window.claude.use('db');
+        uid = user ? await user.id() : null;
+        if (db && uid) {
+          const snap = await db.doc('data/users/' + uid + '/season').get();
+          if (snap.exists && tryImport(snap.data().json)) { loaded = true; refreshAll(); }
+        }
+      }
+    } catch (e) { db = null; }
+    setSave(loaded ? '💾 저장된 시즌을 불러왔습니다' : (db && uid ? '💾 진행하면 내 계정에 자동 저장됩니다' : '💾 진행하면 이 브라우저에 자동 저장됩니다'));
   }
 
-  // ── 셋업 ──
-  function loadLeague() { league = api('GET', '/api/league'); renderLeague(); }
+  // ── 탭 ──
+  const SECTIONS = ['home', 'setup', 'game', 'result', 'stand', 'stats', 'train'];
+  function show(section) {
+    SECTIONS.forEach(s => { $(s).hidden = s !== section; });
+  }
+  function go(tab) {
+    currentTab = tab;
+    document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'));
+    if (tab === 'play') {
+      if (state && !state.done) show('game');
+      else if (state && state.done) show('result');
+      else { renderSetup(); show('setup'); }
+      if (state) render();
+    } else {
+      show(tab);
+      if (tab === 'home') renderHome();
+      if (tab === 'stand') renderStand();
+      if (tab === 'stats') renderStats();
+      if (tab === 'train') renderTrain();
+    }
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('nav.tabs button').forEach(b => { b.onclick = () => go(b.dataset.tab); });
 
-  function renderLeague() {
-    $('teamInfo').textContent = league.teamName;
-    $('recordInfo').textContent = `${league.record.wins}승 ${league.record.losses}패`;
+  function refreshHeader() {
+    const s = api('GET', '/api/season');
+    $('seasonInfo').textContent = `${s.year} 시즌 · ${Math.min(s.day + 1, s.length)}/${s.length}일`;
+    const me = s.standings.find(t => t.user);
+    $('recordInfo').textContent = `${me.w}승 ${me.l}패 · ${me.rank}위`;
+    return s;
+  }
+  function refreshAll() { refreshHeader(); go(currentTab === 'play' && !state ? 'home' : currentTab); }
+
+  // ── 홈 ──
+  function standRows(rows) {
+    let h = '<tr><th>순위</th><th style="text-align:left">팀</th><th>경기</th><th>승</th><th>패</th><th>승률</th><th>차</th><th>득</th><th>실</th><th>연속</th></tr>';
+    rows.forEach(t => {
+      h += `<tr class="${t.user ? 'me' : ''}"><td>${t.rank}</td><td class="t">${esc(t.name)}</td><td>${t.w + t.l}</td><td>${t.w}</td><td>${t.l}</td>` +
+        `<td>${t.pct.toFixed(3).replace(/^0/, '')}</td><td>${t.gb === 0 ? '-' : t.gb.toFixed(1)}</td><td>${t.rs}</td><td>${t.ra}</td><td>${esc(t.streak || '-')}</td></tr>`;
+    });
+    return h;
+  }
+  function renderHome() {
+    const s = refreshHeader();
+    $('champPanel').hidden = !s.done;
+    $('todayPanel').hidden = s.done;
+    if (s.done) {
+      const me = s.standings.find(t => t.user);
+      $('champTitle').textContent = `🏆 ${s.year} 시즌 종료`;
+      $('champText').textContent = `우승: ${s.champion} · 나의 팀 ${me.rank}위 (${me.w}승 ${me.l}패)`;
+    } else {
+      $('dayTitle').textContent = `📅 ${s.day + 1}일차 / ${s.length}경기`;
+      $('oppName').textContent = s.today.opponent;
+      $('oppStr').textContent = `팀 전력 ${s.today.oppStrength}`;
+      $('myStr').textContent = `팀 전력 ${s.myStrength}`;
+    }
+    $('recentList').innerHTML = s.recent.length
+      ? s.recent.map(g => `<div class="newsline">${g.day}일 vs ${esc(g.opponent)} <b style="color:${g.result === '승' ? 'var(--led)' : 'var(--red)'}">${g.result}</b> ${esc(g.score)}</div>`).join('')
+      : '아직 경기 기록이 없습니다.';
+    $('newsList').innerHTML = s.news.length ? s.news.map(n => `<div class="newsline">${esc(n)}</div>`).join('') : '경기를 하면 다른 구장 결과가 나옵니다.';
+    $('miniStand').innerHTML = standRows(s.standings.slice(0, 5));
+  }
+  $('goPlay').onclick = () => go('play');
+  function quick(days) {
+    touched = true;
+    try {
+      const r = api('POST', '/api/season/quick', { days });
+      const w = r.results.filter(x => x.result === '승').length;
+      toast(`${r.results.length}경기 자동 진행: ${w}승 ${r.results.length - w}패`);
+      save();
+      renderHome();
+    } catch (e) { toast(e.message); }
+  }
+  $('quick1').onclick = () => quick(1);
+  $('quick7').onclick = () => quick(7);
+  $('nextSeason').onclick = () => {
+    touched = true;
+    const d = api('GET', '/api/season');
+    api('POST', '/api/season/new', { keep: true, length: d.length, difficulty: d.difficulty });
+    state = null; gameId = null; manualLineup = null;
+    save(); toast('새 시즌을 시작했습니다'); renderHome();
+  };
+  let confirmTimer = null;
+  $('btnNewLeague').onclick = () => {
+    const b = $('btnNewLeague');
+    if (!confirmTimer) {
+      b.textContent = '한 번 더 누르면 시작'; b.className = 'stop';
+      confirmTimer = setTimeout(() => { confirmTimer = null; b.textContent = '새 리그 시작'; b.className = ''; }, 4000);
+      return;
+    }
+    clearTimeout(confirmTimer); confirmTimer = null; b.textContent = '새 리그 시작'; b.className = '';
+    touched = true;
+    const [lo, hi] = $('strength').value.split(',').map(Number);
+    api('POST', '/api/season/new', { length: Number($('lenSel').value), minOvr: lo, maxOvr: hi, difficulty: $('diffSel').value });
+    state = null; gameId = null; manualLineup = null; stopAuto();
+    save(); toast('새 리그를 시작했습니다'); renderHome();
+  };
+
+  // ── 경기 준비 ──
+  function renderSetup() {
+    league = api('GET', '/api/league');
+    const s = api('GET', '/api/season');
+    if (s.done) { toast('시즌이 끝났습니다. 홈에서 다음 시즌을 시작하세요.'); go('home'); return; }
+    $('setupTitle').textContent = `⚾ ${s.day + 1}일차 · vs ${s.today.opponent} 경기 준비`;
     const hitters = league.roster.filter(p => p.pos !== 'SP' && p.pos !== 'RP');
     const pitchers = league.roster.filter(p => p.pos === 'SP' || p.pos === 'RP');
     if (!manualLineup || manualLineup.some(id => !hitters.find(p => p.id === id))) {
@@ -297,9 +504,9 @@
       const p = hitters.find(x => x.id === id);
       const li = document.createElement('li');
       li.style.marginBottom = '6px';
-      li.innerHTML = `<span class="muted">[${p.pos}]</span> ${p.name} <span class="muted">OVR ${p.effOvr}</span> `;
-      const up = mkBtn('▲', () => { [manualLineup[i - 1], manualLineup[i]] = [manualLineup[i], manualLineup[i - 1]]; renderLeague(); });
-      const dn = mkBtn('▼', () => { [manualLineup[i + 1], manualLineup[i]] = [manualLineup[i], manualLineup[i + 1]]; renderLeague(); });
+      li.innerHTML = `<span class="muted">[${esc(p.pos)}]</span> ${esc(p.name)} <span class="muted">OVR ${p.effOvr} · 피로 ${p.fatigue}</span> `;
+      const up = mkBtn('▲', () => { [manualLineup[i - 1], manualLineup[i]] = [manualLineup[i], manualLineup[i - 1]]; renderSetup(); });
+      const dn = mkBtn('▼', () => { [manualLineup[i + 1], manualLineup[i]] = [manualLineup[i], manualLineup[i + 1]]; renderSetup(); });
       up.disabled = i === 0; dn.disabled = i === manualLineup.length - 1;
       up.setAttribute('aria-label', `${p.name} 타순 올리기`); dn.setAttribute('aria-label', `${p.name} 타순 내리기`);
       li.append(up, ' ', dn);
@@ -308,9 +515,15 @@
     const inLineup = new Set(manualLineup);
     const bench = hitters.filter(p => !inLineup.has(p.id));
     $('benchList').innerHTML = bench.length
-      ? '<ul style="padding-left:18px">' + bench.map(p => `<li>${p.name} [${p.pos}] · OVR ${p.effOvr}</li>`).join('') + '</ul>'
+      ? '<ul style="padding-left:18px">' + bench.map(p => `<li>${esc(p.name)} [${esc(p.pos)}] · OVR ${p.effOvr} <button class="sm" data-swap="${esc(p.id)}">타순에 넣기</button></li>`).join('') + '</ul>'
       : '<span class="muted">벤치 없음</span>';
-
+    $('benchList').querySelectorAll('[data-swap]').forEach(b => {
+      b.onclick = () => {   // 벤치 선수를 타순에서 OVR 가장 낮은 선수와 교체
+        const low = manualLineup.map(id => hitters.find(x => x.id === id)).sort((a, c) => a.effOvr - c.effOvr)[0];
+        manualLineup[manualLineup.indexOf(low.id)] = b.dataset.swap;
+        renderSetup();
+      };
+    });
     const sel = $('starterSel'), prev = sel.value;
     sel.innerHTML = '';
     [...pitchers].sort((a, b) => (a.pos === 'SP' ? 0 : 1) - (b.pos === 'SP' ? 0 : 1) || a.fatigue - b.fatigue).forEach(p => {
@@ -319,35 +532,21 @@
       sel.appendChild(o);
     });
     if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
-    $('pitchList').innerHTML = '<ul style="padding-left:18px">' + pitchers.map(p => `<li>${p.name} (${p.pos}) · OVR ${p.effOvr} · 피로 ${p.fatigue}%</li>`).join('') + '</ul>';
-
-    if (!$('oppSel').options.length) {
-      league.opponents.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; $('oppSel').appendChild(o); });
-      league.difficulties.forEach(d => { const o = document.createElement('option'); o.value = d.id; o.textContent = d.label; $('diffSel').appendChild(o); });
-      $('diffSel').value = 'NORMAL';
-    }
-    $('recent').innerHTML = league.recent.length
-      ? league.recent.map(g => `<div>vs ${g.opponent} <b style="color:${g.result === '승' ? 'var(--led)' : 'var(--red)'}">${g.result}</b> ${g.score}</div>`).join('')
-      : '아직 경기 기록이 없습니다.';
+    $('pitchList').innerHTML = '<ul style="padding-left:18px">' + pitchers.map(p => `<li>${esc(p.name)} (${esc(p.pos)}) · OVR ${p.effOvr} · 피로 ${p.fatigue}%</li>`).join('') + '</ul>';
   }
-
   function mkBtn(text, fn) { const b = document.createElement('button'); b.className = 'sm'; b.textContent = text; b.onclick = fn; return b; }
-
-  $('btnReset').onclick = () => {
-    const [lo, hi] = $('strength').value.split(',').map(Number);
-    manualLineup = null;
-    try { league = api('POST', '/api/league/reset', { minOvr: lo, maxOvr: hi }); renderLeague(); $('setupMsg').textContent = '새 로스터를 구성했습니다.'; }
-    catch (e) { toast(e.message); }
-  };
+  $('btnAutoLineup').onclick = () => { manualLineup = null; renderSetup(); };
 
   $('btnStart').onclick = () => {
     try {
-      const res = api('POST', '/api/game', { opponent: $('oppSel').value, difficulty: $('diffSel').value, starter: $('starterSel').value, lineup: manualLineup });
+      touched = true;
+      const res = api('POST', '/api/game', { starter: $('starterSel').value, lineup: manualLineup });
       gameId = res.state.gameId; state = res.state;
       $('log').innerHTML = '';
-      showSection('game');
+      show('game');
       appendLines(res.lines);
       render();
+      window.scrollTo(0, 0);
     } catch (e) { toast(e.message); }
   };
 
@@ -358,7 +557,6 @@
     while (log.children.length > 600) log.removeChild(log.firstChild);
     log.scrollTop = log.scrollHeight;
   }
-
   function advance(mode, opts = {}) {
     if (!gameId) return;
     try {
@@ -369,10 +567,9 @@
       if (res.paused) { stopAuto(); render(); return; }
       appendLines(res.lines);
       render();
-      if (state.done) { stopAuto(); loadLeague(); setTimeout(() => showResult(state), 900); }
+      if (res.gameOver) { stopAuto(); save(); refreshHeader(); setTimeout(() => { if (currentTab === 'play') { showResult(state); } }, 900); }
     } catch (e) { stopAuto(); toast(e.message); }
   }
-
   function startAuto() {
     stopAuto();
     ackNext = true;
@@ -384,7 +581,6 @@
     autoTimer = null;
     $('btnAuto').textContent = '▶ 자동 중계'; $('btnAuto').className = 'auto';
   }
-
   $('btnAuto').onclick = () => { if (autoTimer) stopAuto(); else startAuto(); render(); };
   $('speedSel').onchange = () => { if (autoTimer) startAuto(); };
   $('btnOne').onclick = () => { stopAuto(); advance('pitch', { ack: true }); };
@@ -413,16 +609,13 @@
     items.forEach(it => { const o = document.createElement('option'); o.value = val(it); o.textContent = label(it); sel.appendChild(o); });
     if (keep && prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
   }
-
-  // ── 렌더링 ──
   function linescoreHtml(s) {
     let h = '<tr><th class="team">팀</th>';
     for (let i = 0; i < s.innings; i++) h += `<th>${i + 1}</th>`;
     h += '<th>R</th><th>H</th></tr>';
-    const row = (n, arr, r, hh) => `<tr><td class="team">${n}</td>` + arr.map(v => `<td>${v ?? ''}</td>`).join('') + `<td class="r">${r}</td><td>${hh}</td></tr>`;
+    const row = (n, arr, r, hh) => `<tr><td class="team">${esc(n)}</td>` + arr.map(v => `<td>${v ?? ''}</td>`).join('') + `<td class="r">${r}</td><td>${hh}</td></tr>`;
     return h + row(s.myName, s.linescore.mine, s.score.mine, s.hits.mine) + row(s.opponent, s.linescore.theirs, s.score.theirs, s.hits.theirs);
   }
-
   function render() {
     if (!state) return;
     const s = state;
@@ -430,7 +623,6 @@
     $('sbMineScore').textContent = s.score.mine; $('sbTheirScore').textContent = s.score.theirs;
     $('sbState').textContent = `${s.inning}회${s.top ? '초 ▲' : '말 ▼'}  ·  ${s.outs}아웃  ·  B${s.balls} S${s.strikes}  ·  투구 ${s.pitchTotal}`;
     $('linescore').innerHTML = linescoreHtml(s);
-
     const b = $('banner');
     if (s.done) { b.className = 'banner alert'; b.textContent = '🏁 경기 종료'; }
     else if (autoTimer) { b.className = 'banner auto'; b.textContent = '▶ 자동 중계 중 — 감독 판단이 필요하면 멈춥니다'; }
@@ -442,23 +634,20 @@
       b.className = 'banner';
       b.textContent = s.top ? '⚾ 공격 중 — 감독 사인을 낼 수 있습니다' : '⚾ 수비 중 — 구종 사인과 투수 교체가 가능합니다';
     }
-
     drawField(s);
-    $('myLineup').innerHTML = s.lineup.map((p, i) => `<li class="${p.current ? 'cur' : ''}">${p.current ? '▶ ' : ''}${p.name} [${p.pos}] ${p.effOvr}</li>`).join('');
+    $('myLineup').innerHTML = s.lineup.map(p => `<li class="${p.current ? 'cur' : ''}">${p.current ? '▶ ' : ''}${esc(p.name)} [${esc(p.pos)}] ${p.effOvr}</li>`).join('');
     $('myPitcher').innerHTML = pitcherHtml(s.myPitcher, 'var(--led)');
     $('oppPitcher').innerHTML = pitcherHtml(s.oppPitcher, '#f6a49c');
     renderOrders(s);
   }
-
   function pitcherHtml(p, color) {
     if (!p) return '<span class="muted">-</span>';
     const hpColor = p.hp > 60 ? 'var(--led)' : p.hp > 35 ? 'var(--gold)' : 'var(--red)';
-    return `<div style="color:${color};font-weight:700">${p.name} (${p.pos})</div>` +
+    return `<div style="color:${color};font-weight:700">${esc(p.name)} (${esc(p.pos)})</div>` +
       `<div class="hpbar"><i style="width:${p.hp}%;background:${hpColor}"></i></div>` +
       `<div style="color:${hpColor}">체력 ${p.hp}% · 피로 ${p.fatigue}%</div>` +
       `<div class="muted">${p.inn}이닝 · ${p.pitches}구 · ${p.hits}피안타 · ${p.runs}실점 · ${p.ks}삼진 · ${p.walks}볼넷</div>`;
   }
-
   function renderOrders(s) {
     const over = s.done, atk = s.top;
     ['btnOne', 'btnAtBat', 'btnInning', 'btnAuto', 'btnGame'].forEach(id => { $(id).disabled = over; });
@@ -471,17 +660,17 @@
     const bases = s.runners.map((r, i) => (r ? i : -1)).filter(i => i >= 0);
     fillSelect($('pinchRunBase'), bases, b => b, b => `${b + 1}루 ${s.runners[b]}`, false, '주자 없음');
     $('pinchRunBase').disabled = $('btnPinchRun').disabled = over || !atk || !bases.length || !s.bench.length;
-    fillSelect($('pitcherSel'), s.bullpen, p => p.id, p => `${p.name} (${p.pos}) 체력 ${p.hp}`, true, atk ? '수비 때만 가능' : '불펜 없음');
+    fillSelect($('pitcherSel'), s.bullpen, p => p.id, p => `${p.name} (${p.pos}) 체력 ${p.hp} · 피로 ${p.fatigue}`, true, atk ? '수비 때만 가능' : '불펜 없음');
     $('pitcherSel').disabled = $('btnPitcher').disabled = over || atk || !s.bullpen.length;
     fillSelect($('callSel'), s.pitchCalls, c => c.id, c => c.label, false, '');
     $('callSel').value = s.pitchCall;
     $('callSel').disabled = over || atk;
   }
-
   function drawField(s) {
     const cv = $('field');
     const dpr = window.devicePixelRatio || 1;
     const w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
     if (cv.width !== Math.round(w * dpr)) cv.width = Math.round(w * dpr);
     if (cv.height !== Math.round(h * dpr)) cv.height = Math.round(h * dpr);
     const g = cv.getContext('2d');
@@ -520,6 +709,7 @@
   window.addEventListener('resize', () => { if (state && !$('game').hidden) drawField(state); });
 
   // ── 결과 ──
+  const avg3 = (h, ab) => (ab ? (h / ab).toFixed(3).replace(/^0/, '') : '-');
   function showResult(s) {
     const win = s.score.mine > s.score.theirs;
     $('resTitle').textContent = win ? '🏆 승리!' : '😢 패배';
@@ -527,19 +717,76 @@
     $('resScore').textContent = `${s.myName}  ${s.score.mine} : ${s.score.theirs}  ${s.opponent}`;
     $('resDetail').textContent = `안타 ${s.hits.mine} | ${s.hits.theirs} · ${s.inning > 9 ? '연장 ' : ''}${s.inning}회 종료 · 투구 ${s.pitchTotal}`;
     $('resLinescore').innerHTML = linescoreHtml(s);
+    $('boxBat').innerHTML = '<tr><th style="text-align:left">타자</th><th>타수</th><th>안타</th><th>홈런</th><th>타점</th><th>득점</th><th>볼넷</th><th>삼진</th></tr>' +
+      s.batBox.map(b => `<tr><td class="t">${esc(b.name)} <span class="muted">${esc(b.pos)}</span></td><td>${b.ab}</td><td>${b.h}</td><td>${b.hr}</td><td>${b.rbi}</td><td>${b.r}</td><td>${b.bb}</td><td>${b.k}</td></tr>`).join('');
     const box = list => '<tr><th style="text-align:left">투수</th><th>이닝</th><th>투구</th><th>피안타</th><th>실점</th><th>볼넷</th><th>삼진</th></tr>' +
-      list.map(p => `<tr><td style="text-align:left">${p.name}</td><td>${p.inn}</td><td>${p.pitches}</td><td>${p.hits}</td><td>${p.runs}</td><td>${p.walks}</td><td>${p.ks}</td></tr>`).join('');
-    $('boxMineTitle').textContent = `⚾ ${s.myName} 투수 기록`;
-    $('boxTheirsTitle').textContent = `⚾ ${s.opponent} 투수 기록`;
+      list.map(p => `<tr><td class="t">${esc(p.name)}</td><td>${p.inn}</td><td>${p.pitches}</td><td>${p.hits}</td><td>${p.runs}</td><td>${p.walks}</td><td>${p.ks}</td></tr>`).join('');
+    $('boxMineTitle').textContent = `⚾ ${s.myName} 투수`;
+    $('boxTheirsTitle').textContent = `⚾ ${s.opponent} 투수`;
     $('boxMine').innerHTML = box(s.box.mine);
     $('boxTheirs').innerHTML = box(s.box.theirs);
-    showSection('result');
+    const season = api('GET', '/api/season');
+    $('resNews').innerHTML = season.news.map(n => `<div class="newsline">${esc(n)}</div>`).join('') || '없음';
+    show('result');
+    window.scrollTo(0, 0);
+  }
+  $('btnHome').onclick = () => { state = null; gameId = null; go('home'); };
+
+  // ── 순위 / 기록 / 훈련 ──
+  function renderStand() {
+    const s = refreshHeader();
+    $('standTitle').textContent = `📊 ${s.year} 시즌 순위 (${s.day}/${s.length}일)`;
+    $('fullStand').innerHTML = standRows(s.standings);
+  }
+  function renderStats() {
+    const st = api('GET', '/api/stats');
+    const L = st.leaders;
+    const card = (title, list, fmt) => `<div class="panel"><p class="title">${title}</p>` +
+      (list.length ? `<ol>${list.map(x => `<li>${esc(x.name)} <span>${esc(x.team || '')}</span> <b>${fmt(x)}</b></li>`).join('')}</ol>` : '<span class="muted">기록 없음</span>') + '</div>';
+    $('leaders').innerHTML =
+      card('타율', L.avg, x => avg3(x.h, x.ab)) + card('홈런', L.hr, x => x.hr) + card('타점', L.rbi, x => x.rbi) +
+      card('OPS', L.ops, x => x.ops.toFixed(3)) + card('평균자책점', L.era, x => x.era.toFixed(2)) +
+      card('탈삼진', L.k, x => x.k) + card('다승', L.w, x => `${x.w}승`);
+    $('myBat').innerHTML = '<tr><th style="text-align:left">선수</th><th>경기</th><th>타율</th><th>타수</th><th>안타</th><th>2루타</th><th>홈런</th><th>타점</th><th>득점</th><th>볼넷</th><th>삼진</th><th>OPS</th></tr>' +
+      [...st.myBatters].sort((a, b) => b.pa - a.pa).map(b => `<tr><td class="t">${esc(b.name)} <span class="muted">${esc(b.pos)}</span></td><td>${b.g}</td><td>${avg3(b.h, b.ab)}</td><td>${b.ab}</td><td>${b.h}</td><td>${b.d2}</td><td>${b.hr}</td><td>${b.rbi}</td><td>${b.r}</td><td>${b.bb}</td><td>${b.k}</td><td>${b.pa ? b.ops.toFixed(3) : '-'}</td></tr>`).join('');
+    $('myPit').innerHTML = '<tr><th style="text-align:left">선수</th><th>경기</th><th>선발</th><th>승</th><th>패</th><th>이닝</th><th>평균자책점</th><th>피안타</th><th>볼넷</th><th>삼진</th></tr>' +
+      st.myPitchers.map(p => `<tr><td class="t">${esc(p.name)} <span class="muted">${esc(p.pos)}</span></td><td>${p.g}</td><td>${p.gs}</td><td>${p.w}</td><td>${p.l}</td><td>${p.ip}</td><td>${p.era === null ? '-' : p.era.toFixed(2)}</td><td>${p.h}</td><td>${p.bb}</td><td>${p.k}</td></tr>`).join('');
+  }
+  function renderTrain() {
+    const lg = api('GET', '/api/league');
+    $('tpTitle').textContent = `💪 훈련 포인트 ${lg.tp}`;
+    const list = $('trainList');
+    list.innerHTML = '';
+    [...lg.roster].sort((a, b) => (a.pos === 'SP' || a.pos === 'RP') - (b.pos === 'SP' || b.pos === 'RP') || b.ovr - a.ovr).forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'train-row';
+      const fColor = p.fatigue > 60 ? 'var(--red)' : p.fatigue > 35 ? 'var(--gold)' : 'var(--led)';
+      row.innerHTML = `<div><div class="nm">${esc(p.name)} <span class="muted">${esc(p.pos)} · ${p.age}세</span></div>` +
+        `<div class="sub">OVR ${p.ovr} / 잠재력 ${p.potential} · <span style="color:${fColor}">피로 ${p.fatigue}%</span> · ${esc(p.condition)}</div></div>`;
+      const up = document.createElement('button');
+      up.className = 'order sm'; up.textContent = '능력 +1 (3P)';
+      up.disabled = lg.tp < 3 || p.ovr >= p.potential;
+      up.onclick = () => doTrain(p.id, 'ovr');
+      const rest = document.createElement('button');
+      rest.className = 'sm'; rest.textContent = '휴식 (1P)';
+      rest.disabled = lg.tp < 1 || p.fatigue === 0;
+      rest.onclick = () => doTrain(p.id, 'rest');
+      row.append(up, rest);
+      list.appendChild(row);
+    });
+  }
+  function doTrain(id, kind) {
+    touched = true;
+    try {
+      const r = api('POST', '/api/train', { id, kind });
+      toast(kind === 'ovr' ? `${r.player.name} 능력치 ${r.player.ovr}으로 상승!` : `${r.player.name} 피로 회복 (${r.player.fatigue}%)`);
+      save();
+    } catch (e) { toast(e.message); }
+    renderTrain();
   }
 
-  $('btnBack').onclick = () => { gameId = null; state = null; showSection('setup'); loadLeague(); };
-  $('btnAgain').onclick = () => { gameId = null; state = null; showSection('setup'); loadLeague(); };
-
-  showSection('setup');
-  try { loadLeague(); } catch (e) { toast(e.message); }
+  // ── 시작 ──
+  go('home');
+  initStore();
 })();
 </script>
