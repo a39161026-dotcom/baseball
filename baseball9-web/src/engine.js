@@ -40,13 +40,16 @@ class Player {
   }
   get isPitcher() { return PITCHER_POS.includes(this.pos); }
   get condition() { return conditionOf(this.fatigue); }
-  get effOvr() { return Math.min(99, Math.max(40, this.ovr + this.condition[1])); }
+  // 실력 = 기본 능력치 + 컨디션(피로) + 사기(우리 팀 선수만, ±4)
+  get moraleBonus() { return this.morale === undefined ? 0 : Math.max(-4, Math.min(4, Math.round((this.morale - 60) / 10))); }
+  get effOvr() { return Math.min(99, Math.max(40, this.ovr + this.condition[1] + this.moraleBonus)); }
   setFatigue(v) { this.fatigue = clamp(Math.trunc(v), 0, 100); }
   setHp(v) { this.hp = clamp(Math.trunc(v), 0, 100); }
   toDict() {
     return { id: this.id, name: this.name, pos: this.pos, ovr: this.ovr, effOvr: this.effOvr,
       fatigue: this.fatigue, hp: this.hp, condition: this.condition[0], team: this.team, league: this.league,
-      first: this.first || null, last: this.last || null, country: this.country || '' };
+      first: this.first || null, last: this.last || null, country: this.country || '',
+      age: this.age, potential: this.potential, morale: this.morale === undefined ? null : this.morale, rookie: !!this.rookie };
   }
 }
 
@@ -675,12 +678,13 @@ function playerFromRow(r) {
   const p = new Player(name, pos, league, by ? peak - by : 28, ovr, pot, 0, 1, last, peak);
   p.id = id; p.most = most; p.first = first; p.last = lastY;
   p.country = country || ''; p.person = person || id;   // 리그가 달라도 같은 사람이면 같은 person
+  p.birthYear = by || 0;
   return p;
 }
 // 같은 선수를 새 객체로 복사 (국가대표·올스타처럼 소속팀 피로와 분리할 때)
 function clonePlayer(p) {
   const c = new Player(p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era);
-  Object.assign(c, { id: p.id, most: p.most, first: p.first, last: p.last, country: p.country, person: p.person });
+  Object.assign(c, { id: p.id, most: p.most, first: p.first, last: p.last, country: p.country, person: p.person, birthYear: p.birthYear });
   return c;
 }
 const buildAllPlayers = () => PLAYERS.map(playerFromRow);

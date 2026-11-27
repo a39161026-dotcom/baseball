@@ -293,6 +293,91 @@ test('국가대표: 조별리그 → 4강 → 결승, 직접 지휘 경기도 �
   assert.strictEqual(svc2.dispatch('GET', '/api/intl').payload.champion, v.champion);
 });
 
+test('트레이드: 손해 보는 제안은 거절, 넉넉하면 수락하고 선수가 오감', () => {
+  const svc = createService(61);
+  const st = svc.state, me = st.teams[0], them = st.teams[1];
+  const star = [...them.roster].sort((a, b) => b.ovr - a.ovr)[0];
+  const weak = [...me.roster].filter(p => !p.isPitcher).sort((a, b) => a.ovr - b.ovr)[0];
+  let r = svc.dispatch('POST', '/api/trade/propose', { team: them.id, give: [weak.id], get: [star.id] });
+  assert.strictEqual(r.status, 409, '약한 선수 1명으로 스타를 못 데려옴');
+  // 우리 팀 상위 선수 여럿 vs 상대 약한 선수 1명 → 수락 (같은 포지션 유형끼리 맞춰 구성 조건 유지)
+  const theirWeak = [...them.roster].filter(p => !p.isPitcher).sort((a, b) => a.ovr - b.ovr)[0];
+  const myBest = [...me.roster].filter(p => !p.isPitcher).sort((a, b) => b.ovr - a.ovr)[0];
+  const ev = svc.dispatch('POST', '/api/trade/evaluate', { team: them.id, give: [myBest.id], get: [theirWeak.id] }).payload;
+  assert.strictEqual(ev.verdict, 'accept', ev.message);
+  r = svc.dispatch('POST', '/api/trade/propose', { team: them.id, give: [myBest.id], get: [theirWeak.id] });
+  assert.strictEqual(r.status, 200);
+  assert.ok(me.roster.includes(theirWeak) && !me.roster.includes(myBest));
+  assert.ok(them.roster.includes(myBest));
+  assert.strictEqual(myBest.morale, undefined, '떠난 선수는 사기 시스템 밖');
+  assert.ok(theirWeak.morale > 0);
+  const voices = svc.dispatch('GET', '/api/locker').payload.voices.map(v => v.name);
+  assert.ok(voices.includes(myBest.name) && voices.includes(theirWeak.name), '이적 소감');
+});
+
+test('사기와 라커룸: 경기 후 변하고 발언이 쌓임', () => {
+  const svc = createService(62);
+  const me = svc.state.teams[0];
+  svc.dispatch('POST', '/api/season/quick', { days: 8 });
+  const lk = svc.dispatch('GET', '/api/locker').payload;
+  assert.ok(lk.voices.length >= 2);
+  assert.ok(lk.roster.every(p => p.morale >= 0 && p.morale <= 100));
+  const lineupIds = new Set([...me.roster].filter(p => !p.isPitcher).sort((a, b) => b.effOvr - a.effOvr).slice(0, 9).map(p => p.id));
+  const bench = me.roster.filter(p => !p.isPitcher && !lineupIds.has(p.id));
+  if (bench.length) assert.ok(bench.some(p => p.morale < 60), '벤치 선수 사기 하락');
+  // 사기가 실력에 반영
+  const p = me.roster[0];
+  p.setFatigue(50); p.morale = 100; const hi = p.effOvr; p.morale = 0; const lo = p.effOvr;
+  assert.ok(hi - lo === 8 || (hi === 99 || lo === 40), `사기 ±4: ${hi} vs ${lo}`);
+});
+
+test('드래프트와 성장: 시즌 종료 → 드래프트 → 다음 시즌 나이·능력치 변화', () => {
+  const svc = createService(63);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18 });
+  svc.dispatch('POST', '/api/season/quick', { days: 9 });
+  svc.dispatch('POST', '/api/allstar/auto', {});
+  svc.dispatch('POST', '/api/season/quick', { days: 9 });
+  let d = svc.dispatch('GET', '/api/draft').payload;
+  assert.ok(d.open && d.myTurn, '우리 차례까지 AI 가 지명');
+  const me = svc.state.teams[0];
+  while (me.roster.length >= 28) me.roster.pop();
+  const pick = d.pool[0];
+  let r = svc.dispatch('POST', '/api/draft/pick', { id: pick.id });
+  assert.strictEqual(r.status, 200);
+  assert.ok(me.roster.some(p => p.id === pick.id && p.rookie));
+  d = r.payload.draft;
+  assert.ok(d.picks.length > 1);
+  const ages = new Map(me.roster.map(p => [p.id, p.age]));
+  const ovrs = new Map(me.roster.map(p => [p.id, p.ovr]));
+  const saved = JSON.parse(JSON.stringify(svc.exportState()));
+  svc.dispatch('POST', '/api/season/new', { keep: true });
+  const st = svc.state;
+  assert.ok(st.teams[0].roster.every(p => !ages.has(p.id) || p.age === ages.get(p.id) + 1), '나이 +1');
+  const changed = st.teams[0].roster.filter(p => ovrs.has(p.id) && p.ovr !== ovrs.get(p.id));
+  assert.ok(changed.length > 0, '성장 또는 노쇠');
+  const young = st.teams[0].roster.filter(p => p.rookie);
+  assert.ok(young.length >= 1, '신인이 다음 시즌 로스터에');
+  // 저장/불러오기 (드래프트 중 상태)
+  const svc2 = createService(1);
+  assert.ok(svc2.importState(saved));
+  assert.ok(svc2.dispatch('GET', '/api/draft').payload.open);
+  assert.ok(svc2.dispatch('GET', '/api/locker').payload.voices.length > 0);
+});
+
+test('새 리그를 시작하면 이전 리그의 훈련 효과가 남지 않음', () => {
+  const svc = createService(64);
+  const target = svc.dispatch('POST', '/api/scout/search', { q: '선동열' }).payload.results[0];
+  svc.state.tp = 100;
+  svc.dispatch('POST', '/api/scout/sign', { id: target.id });
+  const p = svc.state.teams[0].roster.find(x => x.id === target.id);
+  p.potential = p.ovr + 3;
+  svc.dispatch('POST', '/api/train', { id: p.id, kind: 'ovr' });
+  assert.strictEqual(p.ovr, target.ovr + 1);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO' });
+  const again = svc.dispatch('POST', '/api/scout/search', { q: '선동열' }).payload.results[0];
+  assert.strictEqual(again.ovr, target.ovr);
+});
+
 test('밸런스: 팀당 득점이 현실 범위', () => {
   let rm = 0, ro = 0;
   const N = 600;

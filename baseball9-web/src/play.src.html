@@ -122,7 +122,7 @@
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 
   /* 탭 + 시즌 화면 */
-  nav.tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px; }
+  nav.tabs { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px; }
   nav.tabs button { min-height: 40px; padding: 6px 4px; font-size: 13px; background: var(--panel); border-color: var(--line); }
   nav.tabs button[aria-current="page"] { background: var(--panel-2); color: var(--gold); border-color: var(--gold); font-weight: 700; }
   body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
@@ -156,6 +156,19 @@
   .bracket { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
   .bracket div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
   .stand tr.mine td { color: var(--gold); font-weight: 700; }
+  .voice { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; padding-block: 6px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .voice:last-child { border-bottom: 0; }
+  .voice .who { color: var(--dim); font-size: 12px; }
+  .voice.happy .txt { color: #c9f7d6; } .voice.sad .txt { color: #c7d2e0; } .voice.angry .txt { color: #ffb4ab; }
+  .trade-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .trade-cols > div { min-width: 0; max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+  .trade-cols label { display: flex; gap: 6px; align-items: flex-start; padding-block: 5px; font-size: 13px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .trade-cols label:last-child { border-bottom: 0; }
+  .trade-cols input { margin-top: 3px; }
+  .meter { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; margin-block: 10px; font-variant-numeric: tabular-nums; }
+  .meter .bar { height: 10px; background: var(--panel-2); border-radius: 5px; overflow: hidden; }
+  .meter .bar i { display: block; height: 100%; }
+  @media (max-width: 520px) { nav.tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); } .trade-cols { grid-template-columns: 1fr; } }
   @media (max-width: 520px) { nav.tabs button { font-size: 11px; padding: 6px 1px; } .scout-filters { grid-template-columns: 1fr 1fr; } .scout-filters input { grid-column: 1 / -1; } }
 </style>
 
@@ -175,6 +188,7 @@
     <button data-tab="train">💪 훈련</button>
     <button data-tab="scout">🔍 영입</button>
     <button data-tab="intl">🌏 대표</button>
+    <button data-tab="office">🏢 운영</button>
   </nav>
 
   <!-- 홈 -->
@@ -204,12 +218,18 @@
     <div class="panel champ" id="champPanel" hidden>
       <p class="title" id="champTitle"></p>
       <p id="champText" style="margin:0 0 10px"></p>
-      <button class="gold" id="nextSeason">다음 시즌 시작 (선수·능력치 유지)</button>
+      <div class="row">
+        <button class="gold" id="goDraft">📝 신인 드래프트</button>
+        <button id="nextSeason">다음 시즌 시작 (나이·성장 반영)</button>
+      </div>
+      <p class="muted" id="draftHint" style="margin:8px 0 0"></p>
     </div>
     <div class="grid2">
       <div class="panel"><p class="title">최근 우리 경기</p><div id="recentList" class="muted"></div></div>
       <div class="panel"><p class="title">오늘 다른 구장</p><div id="newsList" class="muted"></div></div>
     </div>
+    <div class="panel"><p class="title">🗣 라커룸</p><div id="homeVoices" class="muted"></div>
+      <button class="sm" id="goLocker" style="margin-top:8px">라커룸 전체 보기</button></div>
     <div class="panel"><p class="title">순위 (상위 5)</p><div class="scroll-x"><table class="stand" id="miniStand"></table></div></div>
     <div class="panel">
       <p class="title">⚙️ 새 리그 시작</p>
@@ -387,11 +407,41 @@
     </div>
   </section>
 
+  <!-- 구단 운영 -->
+  <section id="office" hidden>
+    <div class="panel" id="draftPanel">
+      <p class="title" id="draftTitle">📝 신인 드래프트</p>
+      <p class="muted" id="draftInfo" style="margin:0 0 8px"></p>
+      <div id="draftPool"></div>
+      <details style="margin-top:10px"><summary class="lbl">지명 기록</summary><div id="draftPicks" class="side"></div></details>
+    </div>
+    <div class="panel">
+      <p class="title">🤝 트레이드</p>
+      <p class="muted" style="margin:0 0 8px">상대 구단을 고르고 주고받을 선수를 체크하세요. 가치는 능력치(높을수록 급격히 비쌈)·잠재력·나이로 매깁니다. 상대는 자기가 손해 보는 거래는 받지 않습니다.</p>
+      <div class="row"><label class="lbl" for="tradeTeam">상대 구단</label><select id="tradeTeam"></select></div>
+      <div class="meter"><div class="bar"><i id="giveBar" style="background:var(--gold)"></i></div><b id="meterText">-</b><div class="bar" style="transform:scaleX(-1)"><i id="getBar" style="background:var(--blue)"></i></div></div>
+      <p id="tradeMsg" style="margin:0 0 10px;font-weight:600"></p>
+      <div class="trade-cols">
+        <div><p class="lbl" style="margin:4px 0">우리가 주는 선수</p><div id="tradeMine"></div></div>
+        <div><p class="lbl" style="margin:4px 0">받고 싶은 선수</p><div id="tradeTheirs"></div></div>
+      </div>
+      <div class="row" style="margin-top:10px"><button class="gold" id="tradeGo">트레이드 제안</button></div>
+      <details style="margin-top:10px"><summary class="lbl">트레이드 기록</summary><div id="tradeHist" class="side"></div></details>
+    </div>
+    <div class="panel" id="lockerPanel">
+      <p class="title">🗣 라커룸</p>
+      <div class="grid2">
+        <div id="lockerVoices"></div>
+        <div><p class="lbl" style="margin-top:0">선수 사기 (낮은 순)</p><div id="lockerMorale" class="side"></div></div>
+      </div>
+    </div>
+  </section>
+
   <!-- 훈련 -->
   <section id="train" hidden>
     <div class="panel">
       <p class="title" id="tpTitle"></p>
-      <p class="muted" style="margin:0 0 6px">경기를 하면 훈련 포인트가 쌓입니다 (승리 3, 패배 2). 능력치 훈련은 잠재력까지만 오르고 피로가 조금 쌓입니다.</p>
+      <p class="muted" style="margin:0 0 6px">경기를 하면 훈련 포인트가 쌓입니다 (승리 3, 패배 2). 능력치 훈련은 잠재력까지만 오르고, 24세 이하는 2포인트로 쌉니다. 26세 이하는 비시즌에 저절로 크고 32세부터는 떨어집니다. 사기(😄~😡)는 실력에 ±4까지 영향을 줍니다.</p>
       <div id="trainList"></div>
     </div>
   </section>
@@ -463,7 +513,7 @@
   }
 
   // ── 탭 ──
-  const SECTIONS = ['home', 'setup', 'game', 'result', 'stand', 'stats', 'train', 'scout', 'intl'];
+  const SECTIONS = ['home', 'setup', 'game', 'result', 'stand', 'stats', 'train', 'scout', 'intl', 'office'];
   function show(section) {
     SECTIONS.forEach(s => { $(s).hidden = s !== section; });
   }
@@ -483,6 +533,7 @@
       if (tab === 'train') renderTrain();
       if (tab === 'scout') renderScout();
       if (tab === 'intl') renderIntl();
+      if (tab === 'office') renderOffice();
     }
     window.scrollTo(0, 0);
   }
@@ -520,6 +571,8 @@
       const me = s.standings.find(t => t.user);
       $('champTitle').textContent = `🏆 ${s.year} 시즌 종료`;
       $('champText').textContent = `우승: ${s.champion} · 나의 팀 ${me.rank}위 (${me.w}승 ${me.l}패)`;
+      $('goDraft').hidden = !s.draftOpen;
+      $('draftHint').textContent = s.draftOpen ? '드래프트가 진행 중입니다. 다음 시즌을 바로 시작하면 남은 우리 지명권은 자동으로 씁니다.' : '드래프트를 마쳤습니다.';
     } else {
       $('dayTitle').textContent = `📅 ${s.day + 1}일차 / ${s.length}경기`;
       $('oppName').textContent = s.today.opponent;
@@ -531,8 +584,14 @@
       : '아직 경기 기록이 없습니다.';
     $('newsList').innerHTML = s.news.length ? s.news.map(n => `<div class="newsline">${esc(n)}</div>`).join('') : '경기를 하면 다른 구장 결과가 나옵니다.';
     $('miniStand').innerHTML = standRows(s.standings.slice(0, 5));
+    $('homeVoices').innerHTML = s.voices.length ? s.voices.map(voiceHtml).join('') : '경기를 하면 선수들이 한마디씩 합니다.';
   }
   $('goPlay').onclick = () => go('play');
+  $('goDraft').onclick = () => go('office');
+  $('goLocker').onclick = () => { go('office'); setTimeout(() => $('lockerPanel').scrollIntoView(), 50); };
+  const MOOD_ICON = { happy: '😄', sad: '😔', angry: '😠', neutral: '💬' };
+  const voiceHtml = v => `<div class="voice ${esc(v.mood)}"><div>${MOOD_ICON[v.mood] || '💬'}</div><div><div class="txt">“${esc(v.text)}”</div>` +
+    `<div class="who">${esc(v.name)} · ${esc(v.pos)}${v.day !== undefined ? ` · ${v.year || ''} ${v.day + 1}일차` : ''}</div></div></div>`;
   function quick(days) {
     touched = true;
     try {
@@ -549,9 +608,11 @@
   $('nextSeason').onclick = () => {
     touched = true;
     const d = api('GET', '/api/season');
-    api('POST', '/api/season/new', { keep: true, length: d.length, difficulty: d.difficulty });
+    const r = api('POST', '/api/season/new', { keep: true, length: d.length, difficulty: d.difficulty });
     state = null; gameId = null; manualLineup = null;
-    save(); toast('새 시즌을 시작했습니다'); renderHome();
+    const rep = r.devReport || [];
+    const up = rep.filter(x => x.d > 0).length, down = rep.filter(x => x.d < 0).length;
+    save(); toast(`새 시즌 시작! 비시즌 동안 ${up}명 성장, ${down}명 하락`); renderHome();
   };
   let confirmTimer = null;
   $('btnNewLeague').onclick = () => {
@@ -855,10 +916,10 @@
       row.className = 'train-row';
       const fColor = p.fatigue > 60 ? 'var(--red)' : p.fatigue > 35 ? 'var(--gold)' : 'var(--led)';
       row.innerHTML = `<div><div class="nm">${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)}</span></div>` +
-        `<div class="sub">OVR ${p.ovr} / 잠재력 ${p.potential} · <span style="color:${fColor}">피로 ${p.fatigue}%</span> · ${esc(p.condition)}</div></div>`;
+        `<div class="sub">${p.age}세 · OVR ${p.ovr} / 잠재력 ${p.potential} · <span style="color:${fColor}">피로 ${p.fatigue}%</span> · 사기 ${p.mood} ${p.morale}${p.rookie ? ' · 🌱신인' : ''}</div></div>`;
       const up = document.createElement('button');
-      up.className = 'order sm'; up.textContent = '능력 +1 (3P)';
-      up.disabled = lg.tp < 3 || p.ovr >= p.potential;
+      up.className = 'order sm'; up.textContent = `능력 +1 (${p.trainCost}P)`;
+      up.disabled = lg.tp < p.trainCost || p.ovr >= p.potential;
       up.onclick = () => doTrain(p.id, 'ovr');
       const rest = document.createElement('button');
       rest.className = 'sm'; rest.textContent = '휴식 (1P)';
@@ -970,6 +1031,94 @@
     try { const r = api('POST', '/api/intl/quick', {}); if (r.result) toast(r.result); save(); } catch (e) { toast(e.message); }
     renderIntl();
   };
+
+  // ── 구단 운영: 드래프트 · 트레이드 · 라커룸 ──
+  const pick = { give: new Set(), get: new Set() };
+  function renderOffice() { renderDraft(); renderTrade(); renderLocker(); }
+  function renderDraft() {
+    const d = api('GET', '/api/draft');
+    if (!d.open) {
+      $('draftInfo').textContent = '시즌이 끝나면 드래프트가 열립니다. 꼴찌 팀부터 2라운드씩 지명합니다. 신인은 실존 선수가 아닌 가상 유망주입니다.';
+      $('draftPool').innerHTML = ''; $('draftPicks').innerHTML = '';
+      return;
+    }
+    $('draftTitle').textContent = d.done ? '📝 신인 드래프트 (종료)' : `📝 신인 드래프트 · ${d.round}라운드 ${d.pickNo}/${d.total}번째 지명`;
+    $('draftInfo').textContent = d.done ? '모든 지명이 끝났습니다. 홈에서 다음 시즌을 시작하세요.'
+      : d.myTurn ? `우리 차례입니다! 로스터 ${d.rosterSize}/${d.rosterMax}. 잠재력이 높을수록 크게 성장합니다.` : `${d.current} 차례입니다.`;
+    const pool = $('draftPool');
+    pool.innerHTML = '';
+    if (!d.done) d.pool.slice(0, 15).forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'scout-row';
+      row.innerHTML = `<div style="min-width:0"><div style="font-weight:600">${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)} · ${p.age}세</span></div>` +
+        `<div style="color:var(--dim);font-size:12px">현재 ${p.ovr} → 잠재력 <b style="color:var(--gold)">${p.potential}</b></div></div>`;
+      const b = document.createElement('button');
+      b.className = 'order sm'; b.textContent = '지명';
+      b.disabled = !d.myTurn || d.rosterSize >= d.rosterMax;
+      b.onclick = () => {
+        touched = true;
+        try { const r = api('POST', '/api/draft/pick', { id: p.id }); toast(`${r.picked} 지명!`); save(); } catch (e) { toast(e.message); }
+        renderDraft(); renderLocker();
+      };
+      row.append(b);
+      pool.appendChild(row);
+    });
+    $('draftPicks').innerHTML = d.picks.map(x => `<div class="newsline"${x.mine ? ' style="color:var(--gold)"' : ''}>${x.no}. ${esc(x.team)} — ${esc(x.name)} (${esc(x.pos)}, ${x.ovr}→${x.potential})</div>`).join('');
+  }
+  function renderTrade() {
+    const sel = $('tradeTeam');
+    const r = api('POST', '/api/trade/roster', { team: sel.value });
+    if (!sel.options.length) {
+      r.teams.forEach(t => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; sel.appendChild(o); });
+      return renderTrade();
+    }
+    const list = (el, rows, set) => {
+      el.innerHTML = '';
+      rows.forEach(p => {
+        const lab = document.createElement('label');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.checked = set.has(p.id);
+        cb.onchange = () => { if (cb.checked) set.add(p.id); else set.delete(p.id); evalTrade(); };
+        const txt = document.createElement('span');
+        txt.innerHTML = `${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''} <span class="muted">${esc(p.pos)} · ${p.age}세 · OVR ${p.ovr}${p.potential > p.ovr ? '/' + p.potential : ''} · 가치 ${p.value}</span>`;
+        lab.append(cb, txt);
+        el.appendChild(lab);
+      });
+    };
+    list($('tradeMine'), r.mine, pick.give);
+    list($('tradeTheirs'), r.theirs, pick.get);
+    $('tradeHist').innerHTML = r.history.length ? r.history.map(h => `<div class="newsline">${esc(h.team)}: ${esc(h.give.join(', '))} ↔ ${esc(h.get.join(', '))}</div>`).join('') : '<span class="muted">아직 없음</span>';
+    evalTrade();
+  }
+  function evalTrade() {
+    const r = api('POST', '/api/trade/evaluate', { team: $('tradeTeam').value, give: [...pick.give], get: [...pick.get] });
+    const max = Math.max(r.giveValue, r.getValue, 1);
+    $('giveBar').style.width = (r.giveValue / max * 100) + '%';
+    $('getBar').style.width = (r.getValue / max * 100) + '%';
+    $('meterText').textContent = `${r.giveValue.toFixed(1)} : ${r.getValue.toFixed(1)}`;
+    $('tradeMsg').textContent = r.message;
+    $('tradeMsg').style.color = r.verdict === 'accept' ? 'var(--led)' : r.verdict === 'close' ? 'var(--gold)' : r.verdict === 'none' ? 'var(--dim)' : 'var(--red)';
+    $('tradeGo').disabled = r.verdict !== 'accept';
+  }
+  $('tradeTeam').onchange = () => { pick.give.clear(); pick.get.clear(); renderTrade(); };
+  $('tradeGo').onclick = () => {
+    touched = true;
+    try {
+      const r = api('POST', '/api/trade/propose', { team: $('tradeTeam').value, give: [...pick.give], get: [...pick.get] });
+      toast(`트레이드 성사! ${r.give.join(', ')} ↔ ${r.get.join(', ')}`);
+      pick.give.clear(); pick.get.clear(); manualLineup = null; save();
+    } catch (e) { toast(e.message); }
+    renderTrade(); renderLocker();
+  };
+  function renderLocker() {
+    const lk = api('GET', '/api/locker');
+    $('lockerVoices').innerHTML = lk.voices.length ? lk.voices.slice(0, 20).map(voiceHtml).join('') : '<span class="muted">아직 발언이 없습니다.</span>';
+    $('lockerMorale').innerHTML = lk.roster.map(p => {
+      const c = p.morale >= 60 ? 'var(--led)' : p.morale >= 35 ? 'var(--gold)' : 'var(--red)';
+      return `<div style="margin-bottom:6px">${p.mood} ${esc(p.name)} <span class="muted">${esc(p.pos)} · ${p.age}세</span>` +
+        `<div class="hpbar"><i style="width:${p.morale}%;background:${c}"></i></div></div>`;
+    }).join('');
+  }
 
   // ── 시작 ──
   go('home');
