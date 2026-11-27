@@ -4,21 +4,11 @@
 // 구단 로스터 구성: 선발 5 + 불펜 4 + 포수 2 + 내야 4 + 외야 4 + 지명 1 = 20명
 const TEAM_POS = ['SP', 'SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'C', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'OF', 'DH'];
 const ROSTER_MAX = 28;
-const LEAGUE_KEYS = ['KBO', 'NPB', 'MLB', 'WORLD'];
-const LEAGUE_LABEL = { KBO: 'KBO', NPB: 'NPB', MLB: 'MLB', WORLD: '월드' };
+const LEAGUE_KEYS = ['KBO', 'NPB', 'MLB', 'WORLD', 'ALL'];
+const LEAGUE_LABEL = { KBO: 'KBO', NPB: 'NPB', MLB: 'MLB', WORLD: '월드', ALL: '통합' };
 // 국가대표 대회 (WBC 방식): 8개국, 2개 조
 const INTL_GROUPS = { A: ['KOR', 'JPN', 'CUB', 'MEX'], B: ['USA', 'DOM', 'VEN', 'PUR'] };
 const pk = p => p.person || p.id;           // 동일인 키
-
-// 신인 드래프트용 가상 유망주 이름 (미래 선수 데이터는 없으므로 생성)
-const NAME_POOL = {
-  KBO: { a: ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권', '황', '안', '송', '류', '홍'],
-         b: ['민준', '서준', '도윤', '예준', '시우', '하준', '지호', '주원', '지훈', '준서', '건우', '현우', '우진', '선우', '유준', '정우', '승현', '준혁', '지환', '태윤', '재윤', '한결', '동현', '성민'] },
-  NPB: { a: ['Sato', 'Suzuki', 'Takahashi', 'Tanaka', 'Watanabe', 'Ito', 'Yamamoto', 'Nakamura', 'Kobayashi', 'Kato', 'Yoshida', 'Yamada', 'Matsumoto', 'Inoue', 'Kimura'],
-         b: ['Haruto', 'Sota', 'Yuto', 'Riku', 'Ren', 'Kaito', 'Hinata', 'Minato', 'Daiki', 'Shota', 'Kenta', 'Yuki', 'Takumi', 'Ryota', 'Sho'] },
-  MLB: { a: ['Smith', 'Johnson', 'Williams', 'Brown', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Wilson', 'Anderson', 'Thomas', 'Moore', 'Jackson', 'Lee'],
-         b: ['Jack', 'Liam', 'Noah', 'Mason', 'Ethan', 'Logan', 'Lucas', 'Jayden', 'Carlos', 'Diego', 'Owen', 'Caleb', 'Ryan', 'Tyler', 'Austin'] },
-};
 
 function createService(seed) {
   const rng = makeRng(seed);
@@ -58,6 +48,7 @@ function createService(seed) {
         (mode === 'legend' ? p.most === t.name : (p.team === t.name && p.last >= LEAGUES[lg].last)));
       return { name: t.name, group: t.group, league: lg, cands };
     });
+    if (league === 'ALL') return ['KBO', 'NPB', 'MLB'].flatMap(fromLeague).map(d => ({ ...d, group: d.league }));   // KBO·NPB·MLB 52팀이 한 리그
     if (league !== 'WORLD') return fromLeague(league);
     // 월드 리그: 세 리그 강팀 혼합 (KBO 3, NPB 4, MLB 4 + 선택 팀 포함 12팀 → 고를 수 있는 후보는 상위 팀들)
     const strongest = (lg, n) => fromLeague(lg)
@@ -253,7 +244,7 @@ function createService(seed) {
 
   // ── 조회 ──
   function standings() {
-    const rows = S.teams.map(t => ({ id: t.id, name: t.name, user: t.user, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak,
+    const rows = S.teams.map(t => ({ id: t.id, name: t.name, league: t.league, user: t.user, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak,
       pct: t.w + t.l ? t.w / (t.w + t.l) : 0 }));
     rows.sort((a, b) => b.pct - a.pct || (b.rs - b.ra) - (a.rs - a.ra));
     const top = rows[0];
@@ -814,18 +805,28 @@ function createService(seed) {
     return r;
   }
 
-  // ── 신인 드래프트 (시즌 종료 후) ──
-  function makeProspect(i) {
-    const lg = S.league === 'WORLD' ? ['KBO', 'NPB', 'MLB'][rng.randrange(3)] : S.league;
-    const np = NAME_POOL[lg];
-    const name = lg === 'KBO' ? np.a[rng.randrange(np.a.length)] + np.b[rng.randrange(np.b.length)]
-                              : `${np.b[rng.randrange(np.b.length)]} ${np.a[rng.randrange(np.a.length)]}`;
-    const pos = TEAM_POS[rng.randrange(TEAM_POS.length)];
-    const age = 18 + rng.randrange(5);
-    const ovr = 44 + rng.randrange(16);
-    const pot = clamp(ovr + 10 + rng.randrange(30), 60, 95);
-    return [`D${S.year}-${i}`, name, pos, lg, age, ovr, pot];
+  // ── 드래프트 (시즌 종료 후) ──
+  // 풀: KBO·NPB·MLB 실존 선수 중 어느 구단에도 속하지 않은 젊은 선수 (우리 팀·AI 팀 로스터와 겹치지 않음)
+  const DRAFT_CAP = { KBO: 80, NPB: 100, MLB: 160 };
+  function draftCandidates() {
+    const owned = new Set();
+    S.teams.forEach(t => t.roster.forEach(p => owned.add(pk(p))));
+    const val = p => p.potential * 0.7 + p.ovr * 0.3;
+    const seen = new Set(), rows = [];
+    ['KBO', 'NPB', 'MLB'].forEach(lg => {
+      const list = DB.filter(p => p.league === lg && p.birthYear && !owned.has(pk(p)) && p.last >= S.year - 2 && S.year - p.birthYear <= 27)
+        .sort((a, b) => val(b) - val(a));
+      let n = 0;
+      for (const p of list) {
+        if (n >= DRAFT_CAP[lg]) break;
+        if (seen.has(pk(p))) continue;             // 리그를 오간 같은 사람은 한 번만
+        seen.add(pk(p)); n++;
+        rows.push([p.id, p.name, p.pos, lg, S.year - p.birthYear, p.ovr, p.potential, p.team || '']);
+      }
+    });
+    return rows;
   }
+  const rowValue = r => r[6] * 0.7 + r[5] * 0.3;
   function draftView() {
     const D = S.draft;
     if (!D) return { open: false };
@@ -835,7 +836,7 @@ function createService(seed) {
       open: true, done: D.pick >= total, round: Math.floor(D.pick / D.order.length) + 1, rounds: D.rounds,
       pickNo: D.pick + 1, total, myTurn: cur === 0, current: cur === null ? null : team(cur).name,
       myPicks: D.order.map((t, i) => i).filter(i => D.order[i] === 0).map(i => i + 1),
-      pool: D.pool.map(([id, name, pos, lg, age, ovr, pot]) => ({ id, name, pos, league: lg, age, ovr, potential: pot }))
+      pool: D.pool.map(([id, name, pos, lg, age, ovr, pot, from]) => ({ id, name, pos, league: lg, age, ovr, potential: pot, from }))
         .sort((a, b) => (b.potential * 0.7 + b.ovr * 0.3) - (a.potential * 0.7 + a.ovr * 0.3)),
       picks: D.picks.slice().reverse(), rosterSize: myTeam().roster.length, rosterMax: ROSTER_MAX,
     };
@@ -844,33 +845,31 @@ function createService(seed) {
     if (!S.done || S.draft) return;
     const order = standings().slice().reverse().map(r => r.id);       // 꼴찌부터
     const rounds = 2;
-    const pool = [...Array(order.length * rounds + 8).keys()].map(makeProspect);
-    S.draft = { order, rounds, pick: 0, pool, picks: [] };
+    S.draft = { order, rounds, pick: 0, pool: draftCandidates(), picks: [] };
     runAiPicks();
   }
-  function prospectPlayer(row) {
-    const [id, name, pos, lg, age, ovr, pot] = row;
-    const p = new Player(name, pos, lg, age, ovr, pot, 0, 1, '', S.year + 1);
-    Object.assign(p, { id, person: id, birthYear: S.year - age, first: S.year + 1, last: S.year + 1, rookie: true, country: '', ageSet: true });
-    return p;
-  }
   function takeProspect(teamId, poolIdx) {
-    const D = S.draft, row = D.pool.splice(poolIdx, 1)[0], p = prospectPlayer(row), t = team(teamId);
+    const D = S.draft, row = D.pool.splice(poolIdx, 1)[0], t = team(teamId);
+    const p = DB_BY_ID.get(row[0]);
+    p.setFatigue(0); initAge(p);
     t.roster.push(p);
     S.players[p.id] = p;
     if (!t.user && t.roster.length > ROSTER_MAX) {             // AI 구단은 넘치면 가장 약한 노장 정리
       const cut = [...t.roster].filter(x => x !== p).sort((a, b) => tradeValue(a) - tradeValue(b))[0];
       t.roster = t.roster.filter(x => x !== cut);
     }
-    D.picks.push({ no: D.pick + 1, team: t.name, name: p.name, pos: p.pos, ovr: p.ovr, potential: p.potential, mine: t.user });
+    D.picks.push({ no: D.pick + 1, team: t.name, name: p.name, pos: p.pos, ovr: p.ovr, potential: p.potential, league: p.league, mine: t.user });
     D.pick++;
     return p;
   }
   function runAiPicks() {
     const D = S.draft, total = D.order.length * D.rounds;
     while (D.pick < total && D.order[D.pick % D.order.length] !== 0 && D.pool.length) {
-      const best = D.pool.map((r, i) => [r[6] * 0.7 + r[5] * 0.3, i]).sort((a, b) => b[0] - a[0])[0][1];
-      takeProspect(D.order[D.pick % D.order.length], best);
+      const tid = D.order[D.pick % D.order.length], lg = team(tid).league;
+      const rank = rows => rows.map((r, i) => [rowValue(r), i]).sort((a, b) => b[0] - a[0])[0];
+      const same = D.pool.map((r, i) => [r, i]).filter(([r]) => r[3] === lg);        // AI 구단은 자기 리그 선수를 우선 지명
+      const best = same.length ? same[rank(same.map(x => x[0]))[1]][1] : rank(D.pool)[1];
+      takeProspect(tid, best);
     }
     dirty = true;
   }
@@ -881,11 +880,11 @@ function createService(seed) {
     if (D.order[D.pick % D.order.length] !== 0) return [409, { error: '우리 차례가 아닙니다.' }];
     if (myTeam().roster.length >= ROSTER_MAX) return [409, { error: `로스터가 가득 찼습니다 (${ROSTER_MAX}명). 훈련 탭에서 선수를 방출하세요.` }];
     let idx = D.pool.findIndex(r => r[0] === body.id);
-    if (body.auto) idx = D.pool.map((r, i) => [r[6] * 0.7 + r[5] * 0.3, i]).sort((a, b) => b[0] - a[0])[0][1];
+    if (body.auto) idx = D.pool.map((r, i) => [rowValue(r), i]).sort((a, b) => b[0] - a[0])[0][1];
     if (idx < 0) return [404, { error: '이미 지명됐거나 없는 선수입니다.' }];
     const p = takeProspect(0, idx);
     joinMyTeam(p); p.morale = 70;
-    voice(p, say(0, '지명해 주셔서 감사합니다! 꼭 1군에서 뵙겠습니다.', `${S.year + 1} 시즌, 신인왕이 목표입니다!`), 'happy');
+    voice(p, say(0, '지명해 주셔서 감사합니다! 꼭 1군에서 뵙겠습니다.', `${S.year + 1} 시즌, 기대에 부응하겠습니다!`), 'happy');
     runAiPicks();
     return [200, { picked: p.name, draft: draftView() }];
   }
@@ -1004,7 +1003,8 @@ function createService(seed) {
     });
     const teams = o.teams.map(t => ({ group: '', league: o.league || 'KBO', ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
     S = { version: 4, league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
-      voices: o.voices || [], trades: o.trades || [], draft: o.draft || null, devReport: o.devReport || null, offers: o.offers || [], offerDay: o.offerDay || 0,
+      voices: o.voices || [], trades: o.trades || [], draft: o.draft && o.draft.pool.every(r => DB_BY_ID.has(r[0])) ? o.draft : null,   // 옛 가상 신인 드래프트 저장은 버림
+      devReport: o.devReport || null, offers: o.offers || [], offerDay: o.offerDay || 0,
       mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
       recent: o.recent || [], news: o.news || [], schedule: o.schedule, stats: o.stats || {}, players, teams };
     games.clear();

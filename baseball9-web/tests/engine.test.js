@@ -330,7 +330,13 @@ test('드래프트와 성장: 시즌 종료 → 드래프트 → 다음 시즌 �
   const pick = d.pool[0];
   let r = svc.dispatch('POST', '/api/draft/pick', { id: pick.id });
   assert.strictEqual(r.status, 200);
-  assert.ok(me.roster.some(p => p.id === pick.id && p.rookie));
+  assert.ok(me.roster.some(p => p.id === pick.id), '지명한 실존 선수가 우리 로스터에');
+  const owners = svc.state.teams.filter(t => t.roster.some(p => p.id === pick.id));
+  assert.strictEqual(owners.length, 1, '다른 구단과 겹치지 않음');
+  const leagues = new Set(svc.dispatch('GET', '/api/draft').payload.pool.map(x => x.league));
+  assert.ok(leagues.has('KBO') && leagues.has('NPB') && leagues.has('MLB'), 'KBO·NPB·MLB 에서 고를 수 있음');
+  const seen = new Set();
+  svc.state.teams.forEach(t => t.roster.forEach(p => { assert.ok(!seen.has(p.person || p.id), '전 구단 로스터 중복 없음'); seen.add(p.person || p.id); }));
   d = r.payload.draft;
   assert.ok(d.picks.length > 1);
   const ages = new Map(me.roster.map(p => [p.id, p.age]));
@@ -341,8 +347,7 @@ test('드래프트와 성장: 시즌 종료 → 드래프트 → 다음 시즌 �
   assert.ok(st.teams[0].roster.every(p => !ages.has(p.id) || p.age === ages.get(p.id) + 1), '나이 +1');
   const changed = st.teams[0].roster.filter(p => ovrs.has(p.id) && p.ovr !== ovrs.get(p.id));
   assert.ok(changed.length > 0, '성장 또는 노쇠');
-  const young = st.teams[0].roster.filter(p => p.rookie);
-  assert.ok(young.length >= 1, '신인이 다음 시즌 로스터에');
+  assert.ok(st.teams[0].roster.some(p => p.id === pick.id), '지명 선수가 다음 시즌 로스터에');
   // 저장/불러오기 (드래프트 중 상태)
   const svc2 = createService(1);
   assert.ok(svc2.importState(saved));
@@ -430,4 +435,21 @@ test('밸런스: 팀당 득점이 현실 범위', () => {
   const avg = (rm + ro) / (2 * N);
   console.log('평균 득점/팀:', avg.toFixed(2));
   assert.ok(avg > 2.5 && avg < 5.5);
+});
+
+test('통합 리그: KBO·NPB·MLB 52팀이 한 리그에서 겨룸', () => {
+  const svc = createService(77);
+  const t = svc.dispatch('POST', '/api/teams', { league: 'ALL', mode: 'current' }).payload;
+  assert.strictEqual(t.teams.length, 52);
+  assert.deepStrictEqual([...new Set(t.teams.map(x => x.league))].sort(), ['KBO', 'MLB', 'NPB']);
+  assert.strictEqual(svc.dispatch('POST', '/api/season/new', { league: 'ALL', team: '삼성라이온즈', length: 6 }).status, 200);
+  let s = svc.dispatch('GET', '/api/season').payload;
+  assert.strictEqual(s.standings.length, 52);
+  assert.strictEqual(s.myName, '삼성라이온즈');
+  svc.dispatch('POST', '/api/season/quick', { days: 6 });
+  s = svc.dispatch('GET', '/api/season').payload;
+  assert.ok(s.done && s.standings.every(r => r.w + r.l === 6), '모든 팀이 같은 경기 수');
+  const seen = new Set();
+  svc.state.teams.forEach(tm => tm.roster.forEach(p => { assert.ok(!seen.has(p.person || p.id)); seen.add(p.person || p.id); }));
+  assert.ok(svc.dispatch('GET', '/api/draft').payload.open);
 });
