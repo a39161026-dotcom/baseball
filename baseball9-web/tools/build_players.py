@@ -20,6 +20,8 @@ import math
 import os
 import sys
 import urllib.request
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import recent
 from collections import defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -102,7 +104,7 @@ COUNTRY = {
 COUNTRY_NAME = {"KOR": "대한민국", "JPN": "일본", "USA": "미국", "DOM": "도미니카공화국", "VEN": "베네수엘라",
                 "PUR": "푸에르토리코", "CUB": "쿠바", "MEX": "멕시코", "TPE": "대만", "CAN": "캐나다", "PAN": "파나마",
                 "NED": "네덜란드", "AUS": "호주", "COL": "콜롬비아", "NCA": "니카라과", "CHN": "중국", "BRA": "브라질"}
-LEAGUE_LAST = {"KBO": 2025, "NPB": 2025, "MLB": 2024}
+LEAGUE_LAST = {"KBO": 2026, "NPB": 2026, "MLB": 2026}
 # 리그 수준 보정: 능력치는 각 리그 평균 대비로 계산되므로, 리그끼리 맞붙을 때(월드 리그·국가대표·영입)를 위해
 # MLB 기준으로 NPB 와 KBO 를 낮춤. 리그 안의 순위는 바뀌지 않음.
 LEAGUE_OFFSET = {"MLB": 0, "NPB": -3, "KBO": -6}
@@ -121,7 +123,8 @@ def load(key):
         with urllib.request.urlopen(url, timeout=120) as r, open(path, "wb") as f:
             f.write(r.read())
     with open(path, encoding="utf-8-sig", newline="") as f:
-        return list(csv.DictReader(f))
+        rows = list(csv.DictReader(f))
+    return rows if "--no-recent" in sys.argv else recent.patch(key, rows)
 
 
 def num(v):
@@ -509,7 +512,7 @@ def assemble(prefix, league, people, bat_r, pit_r, starters, fld, bat_team, pit_
         by = birth(p) if p else None
         ovr = r["ovr"]
         pot = ovr
-        if r["last"] >= 2024 and by and r["last"] - by <= 25:      # 젊은 현역: 성장 여지
+        if r["last"] >= 2025 and by and r["last"] - by <= 25:      # 젊은 현역: 성장 여지
             pot = min(97, ovr + 2 * (26 - (r["last"] - by)))
         rl, rf = roman(p) if p else ("", "")
         sub = (pit_c.get(pid) if is_pitcher else bat_c.get(pid)) or []
