@@ -146,6 +146,14 @@
   .train-row .sub { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
   .savebar { color: var(--muted); font-size: 12px; margin-top: 4px; }
   .newsline { font-size: 13px; padding-block: 2px; font-variant-numeric: tabular-nums; }
+  .ladder { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; margin-bottom: 8px; }
+  .ladder span { padding: 3px 7px; border-radius: 999px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+  .ladder span.on { background: var(--gold); color: #1a1205; font-weight: 700; border-color: var(--gold); }
+  .ladder span.done { color: var(--dim); }
+  .ladder i { color: var(--muted); font-style: normal; }
+  .stand tr.zone-up td:first-child { box-shadow: inset 3px 0 0 var(--led); }
+  .stand tr.zone-down td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+  .career-msg { font-size: 18px; font-weight: 800; margin: 0 0 8px; }
   .lg { font-size: 10.5px; padding: 1px 5px; border-radius: 4px; margin-left: 4px; vertical-align: 1px; font-weight: 700; }
   .lg-KBO { background: #1d3a5a; color: #9cc9f5; } .lg-NPB { background: #5a1d2a; color: #f5a3b5; } .lg-MLB { background: #1d4a2f; color: #a3f5bd; }
   .scout-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding-block: 8px; border-bottom: 1px solid var(--line); }
@@ -202,7 +210,9 @@
       </div></div>
     </div>
     <div class="panel" id="todayPanel">
+      <div class="ladder" id="ladder" hidden></div>
       <p class="title" id="dayTitle"></p>
+      <p class="muted" id="tierRule" hidden style="margin:-4px 0 6px;font-size:12px"></p>
       <div class="today">
         <div><div class="tn">나의 팀</div><div class="str" id="myStr"></div></div>
         <div class="vs">VS</div>
@@ -217,6 +227,7 @@
     </div>
     <div class="panel champ" id="champPanel" hidden>
       <p class="title" id="champTitle"></p>
+      <p class="career-msg" id="careerMsg" hidden></p>
       <p id="champText" style="margin:0 0 10px"></p>
       <div class="row">
         <button class="gold" id="goDraft">📝 신인 드래프트</button>
@@ -237,7 +248,7 @@
         <label class="lbl" for="lenSel">경기 수</label>
         <select id="lenSel"><option value="18">18경기</option><option value="36" selected>36경기</option><option value="72">72경기</option><option value="144">144경기</option></select>
         <label class="lbl" for="leagueSel">리그</label>
-        <select id="leagueSel"><option value="KBO" selected>KBO (10팀)</option><option value="NPB">NPB 일본 (12팀)</option><option value="MLB">MLB 미국 (30팀)</option><option value="WORLD">월드 리그 (KBO·NPB·MLB 강팀 12팀)</option></select>
+        <select id="leagueSel"><option value="CAREER" selected>🎓 커리어: 아마추어부터 승격</option><option value="KBO">자유 리그: KBO (10팀)</option><option value="NPB">자유 리그: NPB 일본 (12팀)</option><option value="MLB">자유 리그: MLB 미국 (30팀)</option><option value="WORLD">자유 리그: 월드 (KBO·NPB·MLB 강팀 12팀)</option></select>
         <label class="lbl" for="modeSel">선수 기준</label>
         <select id="modeSel"><option value="current" selected>현역 리그 (2025 실제 소속)</option><option value="legend">역대 레전드 리그</option></select>
         <label class="lbl" for="strength">우리 팀 강도</label>
@@ -246,7 +257,7 @@
         <select id="diffSel"><option value="EASY">쉬움</option><option value="NORMAL" selected>보통</option><option value="HARD">어려움</option></select>
         <button id="btnNewLeague">새 리그 시작</button>
       </div>
-      <p class="muted" style="margin:8px 0 0">상대 구단은 실존 선수로 채워집니다. 현역은 마지막 시즌(KBO·NPB 2025, MLB 2024) 소속, 레전드는 가장 오래 뛴 구단(전신 포함) 기준입니다. 같은 사람은 한 팀에만 들어갑니다. 우리 팀은 KBO·NPB·MLB 전체에서 뽑습니다. 새 리그를 시작하면 지금 시즌 기록이 지워지며, 버튼을 한 번 더 눌러야 시작됩니다.</p>
+      <p class="muted" style="margin:8px 0 0">커리어는 아마추어 → 루키 → 세미프로 → 프로(KBO) → 마스터(세계 현역) → 레전드(세계 역대) 순으로, 시즌마다 상위 2팀 승격·하위 2팀 강등입니다. 단계마다 영입할 수 있는 능력치 상한이 있습니다. 자유 리그에서는 리그와 선수 기준을 직접 고릅니다. 상대 구단은 실존 선수로 채워집니다. 현역은 마지막 시즌(KBO·NPB 2025, MLB 2024) 소속, 레전드는 가장 오래 뛴 구단(전신 포함) 기준입니다. 같은 사람은 한 팀에만 들어갑니다. 우리 팀은 KBO·NPB·MLB 전체에서 뽑습니다. 새 리그를 시작하면 지금 시즌 기록이 지워지며, 버튼을 한 번 더 눌러야 시작됩니다.</p>
     </div>
   </section>
 
@@ -32818,8 +32829,21 @@ const opponentNames = () => [...KBO_TEAMS, ...NPB_TEAMS, ...MLB_TEAMS];
 const TEAM_POS = ['SP', 'SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'C', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'OF', 'DH'];
 const ROSTER_MAX = 28;
 const MY_TEAM = '나의 팀';
-const LEAGUE_KEYS = ['KBO', 'NPB', 'MLB', 'WORLD'];
-const LEAGUE_LABEL = { KBO: 'KBO', NPB: 'NPB', MLB: 'MLB', WORLD: '월드' };
+const LEAGUE_KEYS = ['KBO', 'NPB', 'MLB', 'WORLD', 'CAREER'];
+// 커리어 모드 단계 (아마추어부터 승격). band: 그 단계 선수 능력치 대역, cap: 영입 가능 상한
+const TIERS = [
+  { key: 'AMA', name: '🎓 아마추어 리그', band: [46, 56], cap: 60,
+    teams: ['덕수고', '경남고', '북일고', '광주일고', '휘문고', '서울고', '경북고', '부산고', '충암고'] },
+  { key: 'ROOKIE', name: '🌱 루키 리그', band: [52, 62], cap: 66,
+    teams: ['KIA 퓨처스', '삼성 퓨처스', 'LG 퓨처스', '두산 퓨처스', 'KT 퓨처스', 'SSG 퓨처스', '롯데 퓨처스', '한화 퓨처스', 'NC 퓨처스'] },
+  { key: 'SEMI', name: '⚾ 세미프로 리그', band: [58, 66], cap: 72,
+    teams: ['강릉 씨호크스', '제주 오션스', '청주 블루윙스', '전주 비전스', '춘천 레이크스', '목포 하버스', '원주 마운틴스', '순천 리즈', '여수 나이츠'] },
+  { key: 'PRO', name: '🏟 프로 리그', league: 'KBO', mode: 'current', cap: 80 },
+  { key: 'MASTER', name: '🌏 마스터 리그', league: 'WORLD', mode: 'current', cap: 90 },
+  { key: 'LEGEND', name: '👑 레전드 리그', league: 'WORLD', mode: 'legend', cap: 99 },
+];
+const PROMOTE = 2, RELEGATE = 2;
+const LEAGUE_LABEL = { KBO: 'KBO', NPB: 'NPB', MLB: 'MLB', WORLD: '월드', CAREER: '커리어' };
 // 국가대표 대회 (WBC 방식): 8개국, 2개 조
 const INTL_GROUPS = { A: ['KOR', 'JPN', 'CUB', 'MEX'], B: ['USA', 'DOM', 'VEN', 'PUR'] };
 const pk = p => p.person || p.id;           // 동일인 키
@@ -32885,14 +32909,56 @@ function createService(seed) {
     return defs.map((d, i) => ({ id: i + 1, name: d.name, group: d.group, league: d.league, user: false, roster: pickRoster(d.cands, used) }));
   }
 
+  // 커리어 단계의 상대 구단. 1~3단계는 능력치 대역 안의 선수를 팀마다 고르게(돌아가며) 배분
+  function buildTierTeams(t, used) {
+    const T = TIERS[t];
+    if (T.league) return buildLeagueTeams(T.league, T.mode, used);
+    const pool = DB.filter(p => p.ovr >= T.band[0] && p.ovr <= T.band[1] && !used.has(pk(p)));
+    for (let i = pool.length - 1; i > 0; i--) { const j = rng.randrange(i + 1); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const teams = T.teams.map((name, i) => ({ id: i + 1, name, group: i % 2 ? '백호' : '청룡', league: 'KBO', user: false, roster: [] }));
+    TEAM_POS.forEach((pos, k) => {
+      teams.forEach((_, n) => {
+        const tm = teams[(n + k) % teams.length];              // 지명 순서를 돌려 가며 공평하게
+        const free = x => !used.has(pk(x));
+        let p = pool.find(x => free(x) && x.pos === pos);
+        if (!p) p = pool.find(x => free(x) && x.isPitcher === (pos === 'SP' || pos === 'RP'));
+        if (p) { used.add(pk(p)); tm.roster.push(p); }
+      });
+    });
+    return teams;
+  }
+
   // ── 시즌 생성 ──
   // league: KBO | NPB | MLB | WORLD
   // mode: 'current' = 실제 마지막 시즌 소속 / 'legend' = 역대 최다 소속 구단(계보)
   // level: 'weak' | 'mid' | 'strong' — 상대 구단 평균 전력을 기준으로 우리 팀 강도를 정함
   function newSeason({ length = 36, level = 'mid', difficulty = 'NORMAL', keep = false, mode = 'current', league = 'KBO' } = {}) {
     let teams;
-    let devReport = null, carry = null;
-    if (keep && S) {
+    let devReport = null, carry = null, career = null;
+    if (league === 'CAREER' || (keep && S && S.career)) {
+      // 커리어: 단계마다 상대를 새로 꾸림. 우리 팀은 이어서 감
+      const tier = keep && S && S.career ? (S.career.next ?? S.career.tier) : 0;
+      career = { tier, next: null, result: null };
+    }
+    if (keep && S && career) {
+      if (S.draft) { while (S.draft.pick < S.draft.order.length * S.draft.rounds && S.draft.pool.length && myTeam().roster.length < ROSTER_MAX) draftPick({ auto: true }); }
+      devReport = ageAndDevelop();
+      carry = { voices: S.voices || [], trades: S.trades || [] };
+      const mine = myTeam();
+      const fresh = buildAllPlayers();                    // 상대는 기록 값 그대로의 선수로
+      const myIds = new Set(mine.roster.map(p => p.id));
+      DB.length = 0; DB.push(...fresh.map(p => (myIds.has(p.id) ? mine.roster.find(x => x.id === p.id) : p)));
+      DB_BY_ID.clear(); DB.forEach(p => DB_BY_ID.set(p.id, p));
+      const used = new Set(mine.roster.map(pk));
+      const ai = buildTierTeams(career.tier, used);
+      mine.roster.forEach(p => p.setFatigue(0));
+      const T = TIERS[career.tier];
+      mine.group = T.league ? (T.league === 'WORLD' ? '아시아' : LEAGUES[T.league].teams[LEAGUES[T.league].teams.length - 1].group) : '백호';
+      teams = [mine, ...ai];
+      teams.forEach((t, i) => { t.id = i; t.w = 0; t.l = 0; t.rs = 0; t.ra = 0; t.streak = ''; });
+      league = T.league || 'KBO';
+      mode = T.mode || 'current';
+    } else if (keep && S) {
       if (S.draft) { while (S.draft.pick < S.draft.order.length * S.draft.rounds && S.draft.pool.length && myTeam().roster.length < ROSTER_MAX) draftPick({ auto: true }); }
       devReport = ageAndDevelop();             // 나이 +1, 어린 선수 성장 / 노장 하락
       carry = { voices: S.voices || [], trades: S.trades || [] };
@@ -32907,7 +32973,8 @@ function createService(seed) {
       DB.length = 0; DB.push(...fresh);
       DB_BY_ID.clear(); fresh.forEach(p => DB_BY_ID.set(p.id, p));
       const used = new Set();
-      const ai = buildLeagueTeams(league, mode, used);
+      const ai = career ? buildTierTeams(career.tier, used) : buildLeagueTeams(league, mode, used);
+      if (career) { const T = TIERS[career.tier]; league = T.league || 'KBO'; mode = T.mode || 'current'; }
       // 우리 팀: 나머지 선수(3개 리그 전체) 중, 상대 구단 평균 대비 강도 범위에서 무작위 구성
       const aiAvg = ai.reduce((a, t) => a + avgOvr(t.roster), 0) / ai.length;
       const [lo, hi] = { weak: [-9, -2], mid: [-3, 4], strong: [4, 11] }[level] || [-3, 4];
@@ -32921,14 +32988,15 @@ function createService(seed) {
         used.add(pk(p)); mine.push(p);
       });
       // 올스타 소속: 빠진 구단 자리(또는 월드는 아시아)
-      const myGroup = league === 'WORLD' ? '아시아' : LEAGUES[league].teams[LEAGUES[league].teams.length - 1].group;
+      const myGroup = career && !TIERS[career.tier].league ? '백호'
+        : league === 'WORLD' ? '아시아' : LEAGUES[league].teams[LEAGUES[league].teams.length - 1].group;
       teams = [{ id: 0, name: MY_TEAM, user: true, group: myGroup, league, roster: mine }, ...ai];
       teams.forEach(t => { t.w = 0; t.l = 0; t.rs = 0; t.ra = 0; t.streak = ''; });
     }
     const players = {};
     teams.forEach(t => t.roster.forEach(p => { players[p.id] = p; }));
     S = {
-      version: 3, league, mode, year: keep && S ? S.year + 1 : 2026, length, difficulty, day: 0,
+      version: 3, league, mode, career, year: keep && S ? S.year + 1 : 2026, length, difficulty, day: 0,
       teams, players, schedule: makeSchedule(teams.length, length),
       stats: {}, tp: keep && S ? S.tp : 10, recent: [], news: [], done: false, champion: null,
       allStar: { day: length >= 18 ? Math.floor(length / 2) : -1, done: false, result: null },
@@ -33059,9 +33127,26 @@ function createService(seed) {
     if (S.day >= S.length) {
       S.done = true;
       S.champion = standings()[0].name;
+      careerSettle();
       openDraft();                           // 시즌이 끝나면 신인 드래프트 개막
     }
     dirty = true;
+  }
+
+  // 커리어: 상위 2팀 승격, 하위 2팀 강등
+  function careerSettle() {
+    if (!S.career) return;
+    const st = standings(), n = st.length, rank = st.find(r => r.user).rank, from = S.career.tier;
+    let to = from, msg;
+    if (rank <= PROMOTE && from < TIERS.length - 1) { to = from + 1; msg = `🎉 ${rank}위! ${TIERS[to].name} 승격!`; S.tp += 15; }
+    else if (rank > n - RELEGATE && from > 0) { to = from - 1; msg = `😢 ${rank}위… ${TIERS[to].name}로 강등됩니다`; }
+    else msg = rank <= PROMOTE ? `🏆 ${rank}위! 최고 단계에서 버텼습니다` : `${rank}위, ${TIERS[from].name} 잔류`;
+    if (rank === 1) S.tp += 10;
+    S.career.next = to;
+    S.career.result = { rank, from: TIERS[from].name, to: TIERS[to].name, msg, up: to > from, down: to < from };
+    const cap = [...myTeam().roster].sort((a, b) => b.ovr - a.ovr)[0];
+    if (cap) voice(cap, to > from ? `${TIERS[to].name}! 드디어 올라갑니다. 더 큰 무대에서 증명해 보이겠습니다!`
+      : to < from ? '죄송합니다… 내년엔 꼭 다시 올라가겠습니다.' : '내년엔 꼭 승격합시다. 다 같이 더 준비하겠습니다.', to > from ? 'happy' : 'sad');
   }
 
   // ── 조회 ──
@@ -33113,7 +33198,10 @@ function createService(seed) {
   function seasonView() {
     const oppId = todayMatch();
     return {
-      year: S.year, mode: S.mode, league: S.league, leagueLabel: LEAGUE_LABEL[S.league], day: S.day, length: S.length,
+      year: S.year, mode: S.mode, league: S.league, day: S.day, length: S.length,
+      leagueLabel: S.career ? TIERS[S.career.tier].name : LEAGUE_LABEL[S.league],
+      career: S.career ? { tier: S.career.tier, name: TIERS[S.career.tier].name, tiers: TIERS.map(t => t.name),
+        promote: PROMOTE, relegate: RELEGATE, cap: TIERS[S.career.tier].cap, result: S.career.result } : null,
       allStar: { ...S.allStar, due: allStarDue() }, done: S.done, champion: S.champion, tp: S.tp, difficulty: S.difficulty,
       today: oppId === null ? null : { opponent: team(oppId).name, oppStrength: teamStrength(team(oppId)) },
       myStrength: teamStrength(myTeam()),
@@ -33695,12 +33783,14 @@ function createService(seed) {
       if (league && p.league !== league) continue;
       if (pos === 'P' ? !p.isPitcher : pos === 'H' ? p.isPitcher : pos && p.pos !== pos) continue;
       if (q && !p.name.toLowerCase().includes(q)) continue;
+      if (!q && S.career && p.ovr > TIERS[S.career.tier].cap) continue;   // 커리어: 이름 검색이 아니면 지금 영입 가능한 선수만
       res.push(p);
     }
     res.sort((a, b) => b.ovr - a.ovr || a.name.localeCompare(b.name));
     const total = res.length;
     return [200, {
       total, tp: S.tp, rosterSize: myTeam().roster.length, rosterMax: ROSTER_MAX,
+      cap: S.career ? TIERS[S.career.tier].cap : 99, capTier: S.career ? TIERS[S.career.tier].name : null,
       results: res.slice(0, Math.min(60, Number(body.limit) || 40)).map(p => ({
         id: p.id, name: p.name, pos: p.pos, league: p.league, ovr: p.ovr, potential: p.potential,
         team: p.team, first: p.first, last: p.last, owner: ownerOf(p.id), cost: signCost(p), country: p.country,
@@ -33713,6 +33803,8 @@ function createService(seed) {
     const owner = ownerOf(base.id);
     if (owner === MY_TEAM) return [409, { error: `${base.name} 선수는 이미 우리 팀입니다.` }];
     if (owner) return [409, { error: `${base.name} 선수는 ${owner} 소속이라 데려올 수 없습니다.` }];
+    if (S.career && base.ovr > TIERS[S.career.tier].cap)
+      return [409, { error: `${TIERS[S.career.tier].name}에서는 OVR ${TIERS[S.career.tier].cap} 이하 선수만 영입할 수 있습니다. 승격하면 더 좋은 선수를 데려올 수 있어요.` }];
     const cost = signCost(base);
     if (S.tp < cost) return [409, { error: `훈련 포인트가 부족합니다 (${cost} 필요, 보유 ${S.tp}).` }];
     if (myTeam().roster.length >= ROSTER_MAX) return [409, { error: `로스터가 가득 찼습니다 (${ROSTER_MAX}명). 훈련 탭에서 선수를 방출하세요.` }];
@@ -33744,7 +33836,7 @@ function createService(seed) {
     const pl = Object.values(S.players).map(p => [p.id, p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era, p.fatigue, p.first || 0, p.last || 0, p.most || '',
       p.morale === undefined ? null : p.morale, p.birthYear || 0, p.rookie ? 1 : 0, p.ageSet ? 1 : 0]);
     const teams = S.teams.map(t => ({ id: t.id, name: t.name, user: t.user, group: t.group, league: t.league, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak, roster: t.roster.map(p => p.id) }));
-    return { version: 4, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null,
+    return { version: 4, career: S.career || null, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null,
       devReport: S.devReport || null, mode: S.mode, year: S.year, length: S.length, difficulty: S.difficulty, day: S.day, tp: S.tp, done: S.done, champion: S.champion,
       recent: S.recent, news: S.news, schedule: S.schedule, stats: S.stats, players: pl, teams };
   }
@@ -33765,7 +33857,7 @@ function createService(seed) {
     });
     const teams = o.teams.map(t => ({ group: '', league: o.league || 'KBO', ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
     S = { version: 4, league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
-      voices: o.voices || [], trades: o.trades || [], draft: o.draft || null, devReport: o.devReport || null,
+      voices: o.voices || [], trades: o.trades || [], draft: o.draft || null, devReport: o.devReport || null, career: o.career || null,
       mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
       recent: o.recent || [], news: o.news || [], schedule: o.schedule, stats: o.stats || {}, players, teams };
     games.clear();
@@ -33815,7 +33907,7 @@ function createService(seed) {
     return { status: res[0], payload: res[1] };
   }
 
-  newSeason();
+  newSeason({ league: 'CAREER' });               // 처음엔 아마추어 리그부터
   return {
     dispatch, exportState, importState,
     isDirty: () => dirty, markSaved: () => { dirty = false; },
@@ -33914,18 +34006,21 @@ function createService(seed) {
 
   function refreshHeader() {
     const s = api('GET', '/api/season');
-    $('seasonInfo').textContent = `${s.year} ${s.leagueLabel} ${s.mode === 'legend' ? '레전드' : '현역'} · ${Math.min(s.day + 1, s.length)}/${s.length}일`;
+    $('seasonInfo').textContent = `${s.year} ${s.leagueLabel}${s.career ? '' : s.mode === 'legend' ? ' 레전드' : ' 현역'} · ${Math.min(s.day + 1, s.length)}/${s.length}일`;
     const me = s.standings.find(t => t.user);
     $('recordInfo').textContent = `${me.w}승 ${me.l}패 · ${me.rank}위`;
+    standZones = s.career ? { up: s.career.promote, down: s.career.relegate, total: s.standings.length } : null;
     return s;
   }
   function refreshAll() { refreshHeader(); go(currentTab === 'play' && !state ? 'home' : currentTab); }
 
   // ── 홈 ──
+  let standZones = null;   // { up: n, down: n, total } 커리어일 때 승강권 표시
   function standRows(rows) {
     let h = '<tr><th>순위</th><th style="text-align:left">팀</th><th>경기</th><th>승</th><th>패</th><th>승률</th><th>차</th><th>득</th><th>실</th><th>연속</th></tr>';
     rows.forEach(t => {
-      h += `<tr class="${t.user ? 'me' : ''}"><td>${t.rank}</td><td class="t">${esc(t.name)}</td><td>${t.w + t.l}</td><td>${t.w}</td><td>${t.l}</td>` +
+      const zone = standZones ? (t.rank <= standZones.up ? ' zone-up' : t.rank > standZones.total - standZones.down ? ' zone-down' : '') : '';
+      h += `<tr class="${t.user ? 'me' : ''}${zone}"><td>${t.rank}</td><td class="t">${esc(t.name)}</td><td>${t.w + t.l}</td><td>${t.w}</td><td>${t.l}</td>` +
         `<td>${t.pct.toFixed(3).replace(/^0/, '')}</td><td>${t.gb === 0 ? '-' : t.gb.toFixed(1)}</td><td>${t.rs}</td><td>${t.ra}</td><td>${esc(t.streak || '-')}</td></tr>`;
     });
     return h;
@@ -33944,10 +34039,21 @@ function createService(seed) {
       const me = s.standings.find(t => t.user);
       $('champTitle').textContent = `🏆 ${s.year} 시즌 종료`;
       $('champText').textContent = `우승: ${s.champion} · 나의 팀 ${me.rank}위 (${me.w}승 ${me.l}패)`;
+      $('careerMsg').hidden = !(s.career && s.career.result);
+      if (s.career && s.career.result) {
+        $('careerMsg').textContent = s.career.result.msg;
+        $('careerMsg').style.color = s.career.result.up ? 'var(--led)' : s.career.result.down ? 'var(--red)' : 'var(--text)';
+        $('nextSeason').textContent = s.career.result.up || s.career.result.down ? `다음 시즌: ${s.career.result.to}` : '다음 시즌 시작 (나이·성장 반영)';
+      }
       $('goDraft').hidden = !s.draftOpen;
       $('draftHint').textContent = s.draftOpen ? '드래프트가 진행 중입니다. 다음 시즌을 바로 시작하면 남은 우리 지명권은 자동으로 씁니다.' : '드래프트를 마쳤습니다.';
     } else {
       $('dayTitle').textContent = `📅 ${s.day + 1}일차 / ${s.length}경기`;
+      $('ladder').hidden = $('tierRule').hidden = !s.career;
+      if (s.career) {
+        $('ladder').innerHTML = s.career.tiers.map((n, i) => `<span class="${i === s.career.tier ? 'on' : i < s.career.tier ? 'done' : ''}">${esc(n.replace(' 리그', ''))}</span>`).join('<i>›</i>');
+        $('tierRule').textContent = `상위 ${s.career.promote}팀 승격 · 하위 ${s.career.relegate}팀 강등 · 영입 상한 OVR ${s.career.cap}`;
+      }
       $('oppName').textContent = s.today.opponent;
       $('oppStr').textContent = `팀 전력 ${s.today.oppStrength}`;
       $('myStr').textContent = `팀 전력 ${s.myStrength}`;
@@ -33985,8 +34091,10 @@ function createService(seed) {
     state = null; gameId = null; manualLineup = null;
     const rep = r.devReport || [];
     const up = rep.filter(x => x.d > 0).length, down = rep.filter(x => x.d < 0).length;
-    save(); toast(`새 시즌 시작! 비시즌 동안 ${up}명 성장, ${down}명 하락`); renderHome();
+    save(); toast(`${r.career ? r.career.name + ' · ' : ''}새 시즌 시작! 비시즌 동안 ${up}명 성장, ${down}명 하락`); renderHome();
   };
+  $('leagueSel').onchange = () => { $('modeSel').disabled = $('leagueSel').value === 'CAREER'; };
+  $('modeSel').disabled = true;
   let confirmTimer = null;
   $('btnNewLeague').onclick = () => {
     const b = $('btnNewLeague');
@@ -34335,8 +34443,9 @@ function createService(seed) {
   let scoutTimer = null;
   function renderScout() {
     const r = api('POST', '/api/scout/search', { q: $('scoutQ').value, league: $('scoutLeague').value, pos: $('scoutPos').value, limit: 50 });
-    $('scoutTitle').textContent = `🔍 선수 영입 · 훈련 포인트 ${r.tp} · 로스터 ${r.rosterSize}/${r.rosterMax}`;
-    $('scoutCount').textContent = r.total ? `${r.total.toLocaleString()}명 중 능력치 순 상위 ${r.results.length}명` : '조건에 맞는 선수가 없습니다.';
+    $('scoutTitle').textContent = `🔍 선수 영입 · 훈련 포인트 ${r.tp} · 로스터 ${r.rosterSize}/${r.rosterMax}` + (r.capTier ? ` · 상한 OVR ${r.cap}` : '');
+    $('scoutCount').textContent = (r.total ? `${r.total.toLocaleString()}명 중 능력치 순 상위 ${r.results.length}명` : '조건에 맞는 선수가 없습니다.')
+      + (r.capTier && !$('scoutQ').value.trim() ? ` · ${r.capTier}에서 영입할 수 있는 선수만 보여 줍니다 (이름으로 찾으면 전체)` : '');
     const list = $('scoutList');
     list.innerHTML = '';
     r.results.forEach(p => {
@@ -34349,6 +34458,7 @@ function createService(seed) {
       const b = document.createElement('button');
       b.className = 'order sm';
       if (p.owner) { b.textContent = p.owner === '나의 팀' ? '우리 팀' : '소속 있음'; b.disabled = true; }
+      else if (p.ovr > r.cap) { b.textContent = '승격 후 가능'; b.disabled = true; }
       else { b.textContent = `영입 (${p.cost}P)`; b.disabled = r.tp < p.cost || r.rosterSize >= r.rosterMax; b.onclick = () => doSign(p.id); }
       row.append(b);
       list.appendChild(row);

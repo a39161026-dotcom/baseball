@@ -201,6 +201,7 @@ test('우리 팀 강도는 상대 평균 기준으로 조절됨', () => {
 
 test('영입·방출', () => {
   const svc = createService(41);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO' });     // 자유 리그는 영입 상한 없음
   const found = svc.dispatch('POST', '/api/scout/search', { q: 'ichiro', league: 'MLB' }).payload;
   assert.ok(found.results.some(r => r.name === 'Ichiro Suzuki'));
   const kor = svc.dispatch('POST', '/api/scout/search', { q: '선동열' }).payload;
@@ -366,6 +367,7 @@ test('드래프트와 성장: 시즌 종료 → 드래프트 → 다음 시즌 �
 
 test('새 리그를 시작하면 이전 리그의 훈련 효과가 남지 않음', () => {
   const svc = createService(64);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO' });
   const target = svc.dispatch('POST', '/api/scout/search', { q: '선동열' }).payload.results[0];
   svc.state.tp = 100;
   svc.dispatch('POST', '/api/scout/sign', { id: target.id });
@@ -376,6 +378,64 @@ test('새 리그를 시작하면 이전 리그의 훈련 효과가 남지 않음
   svc.dispatch('POST', '/api/season/new', { league: 'KBO' });
   const again = svc.dispatch('POST', '/api/scout/search', { q: '선동열' }).payload.results[0];
   assert.strictEqual(again.ovr, target.ovr);
+});
+
+test('커리어: 아마추어에서 시작해 단계별 승격·강등', () => {
+  const svc = createService(71);
+  let s = svc.dispatch('GET', '/api/season').payload;
+  assert.ok(s.career && s.career.tier === 0 && /아마추어/.test(s.leagueLabel), '처음엔 아마추어');
+  const T0 = svc.state.teams.slice(1);
+  assert.strictEqual(svc.state.teams.length, 10);
+  assert.ok(T0.every(t => t.roster.every(p => p.ovr >= 46 && p.ovr <= 56)), '아마추어 선수 능력치 대역');
+  // 영입 상한
+  const ruth = svc.dispatch('POST', '/api/scout/search', { q: 'babe ruth' }).payload;
+  assert.strictEqual(ruth.cap, 60);
+  const browse = svc.dispatch('POST', '/api/scout/search', {}).payload;
+  assert.ok(browse.results.length > 0 && browse.results.every(p => p.ovr <= 60), '이름 검색이 아니면 영입 가능한 선수만');
+  svc.state.tp = 999;
+  const r = svc.dispatch('POST', '/api/scout/sign', { id: ruth.results[0].id });
+  assert.strictEqual(r.status, 409);
+  assert.ok(/아마추어/.test(r.payload.error));
+  // 우리 팀을 강하게 → 시즌 종료 시 승격
+  svc.state.teams[0].roster.forEach(p => { p.ovr += 15; });
+  svc.dispatch('POST', '/api/season/quick', { days: 100 });
+  svc.dispatch('POST', '/api/allstar/auto', {});
+  svc.dispatch('POST', '/api/season/quick', { days: 100 });
+  s = svc.dispatch('GET', '/api/season').payload;
+  assert.ok(s.done && s.career.result.up, s.career.result.msg);
+  const saved = JSON.parse(JSON.stringify(svc.exportState()));
+  const myIds = svc.state.teams[0].roster.map(p => p.id).sort();
+  svc.dispatch('POST', '/api/season/new', { keep: true });
+  s = svc.dispatch('GET', '/api/season').payload;
+  assert.strictEqual(s.career.tier, 1);
+  assert.ok(/루키/.test(s.leagueLabel));
+  assert.deepStrictEqual(svc.state.teams[0].roster.map(p => p.id).filter(id => myIds.includes(id)).sort(), myIds, '우리 팀은 이어짐');
+  const persons = svc.state.teams.flatMap(t => t.roster.map(p => p.person || p.id));
+  assert.strictEqual(new Set(persons).size, persons.length, '상대에 우리 선수 중복 없음');
+  // 약하면 강등 (루키 → 아마추어)
+  svc.state.teams[0].roster.forEach(p => { p.ovr = 40; });
+  svc.dispatch('POST', '/api/season/quick', { days: 100 });
+  svc.dispatch('POST', '/api/allstar/auto', {});
+  svc.dispatch('POST', '/api/season/quick', { days: 100 });
+  s = svc.dispatch('GET', '/api/season').payload;
+  assert.ok(s.career.result.down, s.career.result.msg);
+  // 저장/불러오기
+  const svc2 = createService(1);
+  assert.ok(svc2.importState(saved));
+  assert.ok(svc2.dispatch('GET', '/api/season').payload.career.result.up);
+});
+
+test('커리어 단계별 상대 전력이 점점 강해짐', () => {
+  const svc = createService(72);
+  const avg = r => r.reduce((a, p) => a + p.ovr, 0) / r.length;
+  const levels = [];
+  for (let t = 0; t < 6; t++) {
+    levels.push(svc.state.teams.slice(1).reduce((a, x) => a + avg(x.roster), 0) / (svc.state.teams.length - 1));
+    svc.state.career.next = Math.min(5, t + 1);
+    svc.state.done = true;
+    svc.dispatch('POST', '/api/season/new', { keep: true });
+  }
+  for (let i = 1; i < levels.length; i++) assert.ok(levels[i] > levels[i - 1], JSON.stringify(levels.map(x => x.toFixed(1))));
 });
 
 test('밸런스: 팀당 득점이 현실 범위', () => {
