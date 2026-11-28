@@ -188,7 +188,8 @@ test('영입·방출', () => {
   const svc = createService(41);
   svc.dispatch('POST', '/api/season/new', { league: 'KBO' });     // 자유 리그는 영입 상한 없음
   const found = svc.dispatch('POST', '/api/scout/search', { q: 'ichiro', league: 'MLB' }).payload;
-  assert.ok(found.results.some(r => r.name === 'Ichiro Suzuki'));
+  assert.ok(found.results.some(r => r.name === '스즈키 이치로'), '영어로 검색해도 한국어 이름이 나옴');
+  assert.ok(svc.dispatch('POST', '/api/scout/search', { q: '이치로', league: 'MLB' }).payload.results.some(r => r.name === '스즈키 이치로'), '한국어 검색');
   const kor = svc.dispatch('POST', '/api/scout/search', { q: '선동열' }).payload;
   assert.strictEqual(kor.results[0].name, '선동열');
   // 다른 구단 소속은 못 데려옴
@@ -404,7 +405,7 @@ test('팀 선택 후 시작: 고른 팀이 우리 팀, 그 팀의 실제 선수�
   }
   // 선택한 팀의 스타가 실제로 우리 선수
   svc.dispatch('POST', '/api/season/new', { league: 'MLB', mode: 'current', team: '뉴욕 양키스' });
-  assert.ok(svc.state.teams[0].roster.some(p => p.name === 'Aaron Judge'), '양키스에 저지');
+  assert.ok(svc.state.teams[0].roster.some(p => p.name === '에런 저지'), '양키스에 저지');
   svc.dispatch('POST', '/api/season/new', { league: 'KBO', mode: 'legend', team: '삼성라이온즈' });
   assert.ok(svc.state.teams[0].roster.some(p => ['양준혁', '오승환', '이승엽(76)'].includes(p.name)), '레전드 삼성');
   // 시즌 진행·저장
@@ -465,7 +466,7 @@ test('연도 선택: 1982~2026 그 해 실제 로스터, 홀수 구단 연도는
   assert.ok(k85.some(t => t.name === 'KIA타이거즈' && t.stars.some(s => s.name === '선동열')), '1985 해태(KIA 계보)에 선동열');
   assert.ok(prev('KBO', 1998).length >= 8);
   assert.strictEqual(prev('MLB', 1982).length, 26, '1982 MLB 26개 구단');
-  assert.ok(prev('MLB', 1998).some(t => t.stars.concat(t.bats).some(s => s.name === 'Mark McGwire')));
+  assert.ok(prev('MLB', 1998).some(t => t.stars.concat(t.bats).some(s => s.name === '마크 맥과이어')));
   assert.ok(prev('NPB', 1990).length === 12);
   // 1987 KBO: 7개 구단(홀수) → 쉬는 날이 생겨도 시즌이 끝까지 진행
   assert.strictEqual(prev('KBO', 1987).length, 7);

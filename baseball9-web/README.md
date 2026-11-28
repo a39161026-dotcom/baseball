@@ -3,6 +3,7 @@
 서버 없이 HTML 한 파일로 돌아가는 버전입니다. 게임 엔진은 JavaFX 버전 → Python(Flask) 버전을 그대로 JavaScript로 옮겼습니다.
 
 - 선수 데이터: 2026 시즌까지 반영(KBO·NPB·MLB 공식 사이트 기록, 소속은 2026 시즌 마지막 팀 기준). 갱신은 `tools/fetch_kbo.py`·`fetch_npb.py`·`fetch_mlb.py` 로 받고 `tools/build_players.py` 로 재생성. 2026 시즌 후 FA 이적은 미반영
+- 외국인 선수(NPB·MLB) 이름은 한국어: KBO 한글 이름 > 위키데이터 한국어 표기 > 위키데이터에서 배운 이름 사전 > 규칙 음역(일본어는 국립국어원 표기법, 영어·스페인어는 근사). 규칙 음역은 틀릴 수 있음. 영어 이름으로도 검색됨. 도구: `tools/korean_names.py`
 - 게시된 링크: https://claude.ai/artifact/629y7xFCNY4Bh5MDLvjSSx
 - `dist/play.html` 파일을 브라우저로 열어도 됩니다.
 

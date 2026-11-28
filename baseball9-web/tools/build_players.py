@@ -654,6 +654,7 @@ def link_persons(rows):
     return linked
 
 
+KO_OVERRIDE = {"Yu Darvish": "다르빗슈 유"}
 ASIAN = {"JPN", "KOR", "TPE", "CHN"}
 
 
@@ -678,6 +679,10 @@ def korean_names(rows):
             src[r[0]] = "wd"
             if r[12] not in ASIAN:
                 pairs.append((en, hit))
+    for r in rows:                                    # 위키데이터에 없는 유명 선수 보정
+        if r[0] in english and english[r[0]] in KO_OVERRIDE:
+            names[r[0]] = KO_OVERRIDE[english[r[0]]]
+            src[r[0]] = "wd"
     tokens = kn.learn_tokens(pairs)
     stats = {"wd": sum(1 for v in src.values() if v == "wd")}
     for r in rows:
