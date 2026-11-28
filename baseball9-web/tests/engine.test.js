@@ -499,3 +499,36 @@ test('라인업: 능력치 순이 아니라 포지션을 맞춰 구성 (외야 4
   const lu2 = positionalLineup(hit.filter(p => p.pos !== '2B'));
   assert.strictEqual(lu2.length, 9);
 });
+
+test('드래프트 10라운드 + 연도별 선수("09 양현종")', () => {
+  const svc = createService(64);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18 });
+  svc.dispatch('POST', '/api/season/quick', { days: 9 });
+  svc.dispatch('POST', '/api/allstar/auto', {});
+  svc.dispatch('POST', '/api/season/quick', { days: 9 });
+  let d = svc.dispatch('GET', '/api/draft').payload;
+  assert.strictEqual(d.rounds, 10);
+  assert.strictEqual(d.total, 100, '10개 구단 × 10라운드');
+  assert.ok(d.pool.length >= 1000, '풀이 지명 수보다 훨씬 큼');
+  const ver = d.pool.filter(p => /^\d\d /.test(p.name));
+  assert.ok(ver.length > 500, '연도별 선수 다수: ' + ver.length);
+  assert.ok(d.pool.some(p => !/^\d\d /.test(p.name)), '기본 선수도 포함');
+  const v = ver.find(p => p.age <= 24 && p.league === 'KBO') || ver[0];
+  const r = svc.dispatch('POST', '/api/draft/pick', { id: v.id });
+  assert.strictEqual(r.status, 200);
+  const mine = svc.state.teams[0].roster.find(p => p.id === v.id);
+  assert.ok(mine && mine.name === v.name && mine.age === v.age, '그 해 나이로 영입');
+  // 나머지는 자동
+  const a = svc.dispatch('POST', '/api/draft/auto', {});
+  assert.strictEqual(a.status, 200);
+  d = a.payload.draft;
+  assert.ok(d.done, '10라운드 모두 끝남');
+  assert.strictEqual(svc.state.teams[0].roster.length, 20 + 10, '우리 팀 10명 지명');
+  // 저장/불러오기: 연도별 선수의 세부 능력치·동일인 키 유지
+  const svc2 = createService(1);
+  assert.ok(svc2.importState(JSON.parse(JSON.stringify(svc.exportState()))));
+  const back = svc2.state.teams[0].roster.find(p => p.id === v.id);
+  assert.ok(back && back.person.includes('@') && back.age === v.age);
+  // 한 팀에 같은 사람의 두 연도 버전도 가능 (사람 키가 다름)
+  const keys = new Set(); svc.state.teams.forEach(t => t.roster.forEach(p => { assert.ok(!keys.has(p.person || p.id)); keys.add(p.person || p.id); }));
+});

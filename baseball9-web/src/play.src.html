@@ -469,6 +469,11 @@
       <p class="title" id="draftTitle">📝 드래프트</p>
       <p class="muted" id="draftInfo" style="margin:0 0 8px"></p>
       <div class="row" id="draftFilter" style="margin-bottom:6px"></div>
+      <div class="row" id="draftTools" style="margin-bottom:8px">
+        <input id="draftQ" type="search" placeholder="이름·연도 검색 (예: 양현종, 09)" style="flex:1;min-width:140px">
+        <button class="sm" id="draftAuto">남은 지명 자동</button>
+        <button class="sm" id="draftSkip">이번 지명 포기</button>
+      </div>
       <div id="draftPool"></div>
       <details style="margin-top:10px"><summary class="lbl">지명 기록</summary><div id="draftPicks" class="side"></div></details>
     </div>
@@ -1320,11 +1325,14 @@
     });
   }
   let draftLg = '';      // 드래프트 풀 리그 필터
+  $('draftQ').oninput = () => renderDraft();
+  $('draftAuto').onclick = () => { touched = true; try { const r = api('POST', '/api/draft/auto', {}); toast(`자동 지명 ${r.picked}명`); save(); } catch (e) { toast(e.message); } renderDraft(); renderLocker(); };
+  $('draftSkip').onclick = () => { touched = true; try { api('POST', '/api/draft/pick', { skip: true }); save(); } catch (e) { toast(e.message); } renderDraft(); };
   function renderDraft() {
     const d = api('GET', '/api/draft');
     if (!d.open) {
-      $('draftInfo').textContent = '시즌이 끝나면 드래프트가 열립니다. 꼴찌 팀부터 2라운드씩 지명합니다. KBO·NPB·MLB 역대 모든 시대의 실존 선수 중 어느 구단에도 없는 선수가 무작위로 나옵니다. 한 번 지명되면 다른 팀은 데려갈 수 없습니다.';
-      $('draftPool').innerHTML = ''; $('draftPicks').innerHTML = '';
+      $('draftInfo').textContent = '시즌이 끝나면 드래프트가 열립니다. 꼴찌 팀부터 2라운드씩 지명합니다. KBO·NPB·MLB 역대 실존 선수가 무작위로 나옵니다. “09 양현종”, “17 양현종”처럼 같은 선수도 시즌마다 따로 나오고(그 해 나이·능력치), 기본 선수도 섞입니다. 꼴찌 팀부터 10라운드, 한 번 지명되면 다른 팀은 데려갈 수 없습니다.';
+      $('draftPool').innerHTML = ''; $('draftPicks').innerHTML = ''; $('draftTools').hidden = true; $('draftFilter').innerHTML = '';
       return;
     }
     $('draftTitle').textContent = d.done ? '📝 드래프트 (종료)' : `📝 드래프트 · ${d.round}라운드 ${d.pickNo}/${d.total}번째 지명`;
@@ -1335,7 +1343,11 @@
     const flt = $('draftFilter');
     flt.innerHTML = d.done ? '' : ['', 'KBO', 'NPB', 'MLB'].map(k => `<button class="order sm${draftLg === k ? ' on' : ''}" data-k="${k}">${k || '전체'}</button>`).join('');
     flt.querySelectorAll('button').forEach(b => { b.onclick = () => { draftLg = b.dataset.k; renderDraft(); }; });
-    if (!d.done) d.pool.filter(p => !draftLg || p.league === draftLg).slice(0, 40).forEach(p => {
+    const q = $('draftQ').value.trim().toLowerCase();
+    $('draftTools').hidden = d.done;
+    $('draftAuto').disabled = d.done;
+    $('draftSkip').disabled = !d.myTurn;
+    if (!d.done) d.pool.filter(p => (!draftLg || p.league === draftLg) && (!q || p.name.toLowerCase().includes(q) || (p.from || '').toLowerCase().includes(q))).slice(0, 40).forEach(p => {
       const row = document.createElement('div');
       row.className = 'scout-row';
       row.innerHTML = `<div style="min-width:0"><div style="font-weight:600">${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)} · ${p.age}세${p.from ? ' · ' + esc(p.from) : ''}</span></div>` +
