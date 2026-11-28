@@ -141,8 +141,9 @@ function createService(seed) {
       stats: {}, tp: keep && S ? S.tp : 10, recent: [], news: [], done: false, champion: null,
       allStar: { day: length >= 18 ? Math.floor(length / 2) : -1, done: false, result: null },
       intl: S && S.intl || null, voices: carry ? carry.voices : [], trades: carry ? carry.trades : [],
-      draft: null, devReport, offers: [], offerDay: 0,
+      draft: null, devReport, offers: [], offerDay: 0, articles: keep && S ? (S.articles || []) : [],
     };
+    prevLeader = null;
     if (!keep) {
       teams.forEach(t => t.roster.forEach(p => { p.ageSet = false; delete p.morale; initAge(p); p.ageSet = true; }));
       myTeam().roster.forEach(joinMyTeam);
@@ -246,7 +247,69 @@ function createService(seed) {
   }
 
   // 사용자 경기가 끝나면 그날 나머지 경기를 모두 진행하고 다음 날로
+  // ── 기사 (경기·리그 소식을 신문 기사처럼) ──
+  const hasBatchim = w => { const c = String(w).trim().slice(-1).charCodeAt(0); return c >= 0xAC00 && c <= 0xD7A3 ? (c - 0xAC00) % 28 !== 0 : false; };
+  const scoreJosa = (n) => ([0, 3, 6].includes(Number(n) % 10) ? '으로' : '로');         // 4-1로 / 3-0으로
+  const josa = (w, a, b) => `${w}${hasBatchim(w) ? a : b}`;                          // 이/가, 은/는, 을/를
+  const shortTeam = n => String(n).replace(/(타이거즈|라이온즈|트윈스|베어스|위즈|랜더스|자이언츠|이글스|다이노스|히어로즈)$/, '');
+  function pushArticle(a) {
+    S.articles = S.articles || [];
+    S.articles.unshift({ day: S.day + 1, year: S.year, ...a });
+    if (S.articles.length > 80) S.articles.length = 80;
+  }
+  const batScore = x => (x.hr || 0) * 4 + (x.h || 0) * 2 + (x.rbi || 0) * 2 + (x.r || 0);
+  const batLine = x => `${x.ab || 0}타수 ${x.h || 0}안타` + (x.hr ? ` ${x.hr}홈런` : '') + (x.rbi ? ` ${x.rbi}타점` : '');
+  function streakOf() {                       // 우리 팀의 현재 연승/연패 (최근 경기 기준)
+    const r = S.recent || [];
+    let n = 0;
+    for (let i = r.length - 1; i >= 0 && r[i].result === r[r.length - 1].result; i--) n++;
+    return { n, win: r.length ? r[r.length - 1].result === '승' : true };
+  }
+  function gameArticle(e, opp, win) {
+    const gs = e.gs, me = myTeam(), my = gs.mine.score, op = gs.theirs.score, diff = Math.abs(my - op);
+    const A = shortTeam(me.name), B = shortTeam(opp.name), st = streakOf();
+    const lineup = gs.mine.lineup, stat = p => e.bat.get(p.id) || {};
+    const hero = [...lineup].sort((a, b) => batScore(stat(b)) - batScore(stat(a)))[0];
+    const foe = [...gs.theirs.lineup].sort((a, b) => batScore(stat(b)) - batScore(stat(a)))[0];
+    const sp = gs.mine.pitcherLines[0], osp = gs.theirs.pitcherLines[0];
+    let title;
+    if (win) {
+      title = st.n >= 3 ? `${A} ${st.n}연승 질주… ${josa(B, '을', '를')} 제압` : diff >= 6 ? `${A}, ${B}에 ${my}-${op} 대승`
+        : diff === 1 ? `${A}, ${B} 1점차 진땀승` : `${A}, ${josa(B, '을', '를')} 꺾고 승리`;
+    } else {
+      title = st.n >= 3 ? `${A} ${st.n}연패 수렁… ${josa(B, '에게', '에게')} 무릎` : diff >= 6 ? `${A}, ${B}에 ${my}-${op} 완패`
+        : diff === 1 ? `${A}, ${B}에 1점차 석패` : `${A}, ${B}에 덜미`;
+    }
+    const sub = hero && batScore(stat(hero)) > 0 ? `${hero.name} ${batLine(stat(hero))}` : (sp ? `선발 ${sp.pitcher.name} ${sp.inningsText}이닝 ${sp.runs}실점` : '');
+    const rank = standings().find(r => r.user);
+    const parts = [`${josa(A, '이', '가')} ${S.day + 1}일차 경기에서 ${josa(B, '을', '를')} ${my}-${op}${scoreJosa(op)} ${win ? '꺾었다' : '졌다'}.`];
+    if (hero && batScore(stat(hero)) > 0) parts.push(`${josa(hero.name, '은', '는')} ${batLine(stat(hero))}으로 팀 타선을 이끌었다.`);
+    if (sp) parts.push(`선발 ${sp.pitcher.name}${hasBatchim(sp.pitcher.name) ? '은' : '는'} ${sp.inningsText}이닝 ${sp.hits}피안타 ${sp.strikeouts}탈삼진 ${sp.runs}실점을 기록했다.`);
+    if (!win && foe && batScore(stat(foe)) > 0) parts.push(`${B}에서는 ${foe.name}이(가) ${batLine(stat(foe))}으로 맹활약했다.`);
+    if (osp && win) parts.push(`${B} 선발 ${osp.pitcher.name}${hasBatchim(osp.pitcher.name) ? '은' : '는'} ${osp.inningsText}이닝 ${osp.runs}실점${osp.runs >= 4 ? '으로 무너졌다' : '으로 호투했지만 타선 지원을 받지 못했다'}.`);
+    parts.push(`이로써 ${A}${hasBatchim(A) ? '은' : '는'} ${me.w}승 ${me.l}패로 ${rank ? rank.rank : '-'}위를 기록했다.${st.n >= 2 ? ` (${st.n}${st.win ? '연승' : '연패'} 중)` : ''}`);
+    pushArticle({ tag: '우리 팀', title, sub, body: parts.join(' ') });
+  }
+  let prevLeader = null;
+  function leagueArticles(results) {         // results: [{a, b, sa, sb}] 오늘 다른 구장 결과
+    if (results.length) {
+      const big = [...results].sort((x, y) => Math.abs(y.sa - y.sb) + (y.sa + y.sb) * 0.1 - Math.abs(x.sa - x.sb) - (x.sa + x.sb) * 0.1)[0];
+      const w = big.sa > big.sb ? big.a : big.b, l = w === big.a ? big.b : big.a, hi = Math.max(big.sa, big.sb), lo = Math.min(big.sa, big.sb);
+      pushArticle({ tag: '리그', title: hi + lo >= 14 ? `${shortTeam(w)}, ${shortTeam(l)}와 ${hi}-${lo} 난타전 끝에 승리` : `${shortTeam(w)}, ${shortTeam(l)}에 ${hi}-${lo} 승리`,
+        sub: `${S.day + 1}일차 리그 소식`, body: `${josa(shortTeam(w), '이', '가')} ${josa(shortTeam(l), '을', '를')} ${hi}-${lo}${scoreJosa(lo)} 꺾었다.` });
+    }
+    const top = standings()[0];
+    if (prevLeader && top.name !== prevLeader && S.day >= 2) pushArticle({ tag: '순위', title: `${shortTeam(top.name)}, 선두 탈환`, sub: `${top.w}승 ${top.l}패`, body: `${josa(shortTeam(top.name), '이', '가')} ${top.w}승 ${top.l}패로 단독 선두에 올랐다. 이전 선두는 ${shortTeam(prevLeader)}.` });
+    prevLeader = top.name;
+    if ((S.day + 1) % 5 === 0) {              // 5일마다 개인 기록 소식
+      const bats = Object.values(S.players).map(batRow).filter(b => b && b.pa >= 15);
+      const hr = [...bats].sort((a, b) => b.hr - a.hr || b.h - a.h)[0];
+      if (hr && hr.hr > 0) pushArticle({ tag: '기록', title: `${hr.name}, ${hr.hr}홈런으로 홈런 선두`, sub: `${hr.team} · 타율 ${hr.avg.toFixed(3).replace(/^0/, '')}`, body: `${hr.team}의 ${hr.name}${hasBatchim(hr.name) ? '이' : '가'} 시즌 ${hr.hr}홈런 ${hr.rbi}타점을 기록하며 홈런 부문 선두를 달리고 있다. 타율은 ${hr.avg.toFixed(3).replace(/^0/, '')}.` });
+    }
+  }
+
   function finishDay(userEngine) {
+    let userWin = null, userOpp = null;
     if (userEngine) {
       const opp = team(todayMatch());
       const mine = myTeam(), gs = userEngine.gs;
@@ -256,8 +319,9 @@ function createService(seed) {
       S.recent.push({ day: S.day + 1, opponent: opp.name, result: win ? '승' : '패', score: `${gs.mine.score}:${gs.theirs.score}` });
       S.recent = S.recent.slice(-10);
       S.tp += win ? 3 : 2;                       // 훈련 포인트
+      userWin = win; userOpp = opp;
     } else S.tp += 1;                            // 휴식일
-    const news = [];
+    const news = [], others = [];
     S.schedule[S.day].forEach(([a, b]) => {
       if (a === 0 || b === 0 || isGhost(a) || isGhost(b)) return;
       const e = buildGame(team(a), team(b));
@@ -265,14 +329,18 @@ function createService(seed) {
       e.run(MODE.GAME);
       recordGame(e, team(a), team(b));
       news.push(`${team(a).name} ${e.gs.mine.score} : ${e.gs.theirs.score} ${team(b).name}`);
+      others.push({ a: team(a).name, b: team(b).name, sa: e.gs.mine.score, sb: e.gs.theirs.score });
     });
     S.news = news;
+    if (userEngine) gameArticle(userEngine, userOpp, userWin);
+    leagueArticles(others);
     S.teams.forEach(t => updateDailyCondition(t.roster, rng));
     S.day++;
     if (S.day < S.length && S.day % 4 === 0 && S.offerDay !== S.day) genOffers();
     if (S.day >= S.length) {
       S.done = true;
       S.champion = standings()[0].name;
+      pushArticle({ tag: '시즌', title: `${shortTeam(S.champion)}, ${S.year} 시즌 우승`, sub: `${S.length}경기 대장정 마무리`, body: `${josa(S.champion, '이', '가')} ${S.year} 시즌 정상에 올랐다. 우리 팀 ${myTeam().name}은(는) ${standings().find(r => r.user).rank}위로 시즌을 마쳤다.` });
       openDraft();                           // 시즌이 끝나면 신인 드래프트 개막
     }
     dirty = true;
@@ -334,6 +402,7 @@ function createService(seed) {
       myStrength: teamStrength(myTeam()),
       standings: standings(), recent: S.recent.slice(-5).reverse(), news: S.news,
       offerCount: (S.offers || []).length,
+      latestNews: (S.articles || []).slice(0, 3),
       voices: (S.voices || []).slice(-4).reverse(), draftOpen: !!S.draft && S.draft.pick < S.draft.order.length * S.draft.rounds,
       devReport: S.devReport || null,
     };
@@ -558,6 +627,7 @@ function createService(seed) {
     })[0];
     S.allStar = { ...S.allStar, done: true, result: `${gs.mine.name} ${gs.mine.score} : ${gs.theirs.score} ${gs.theirs.name}`, mvp: mvp ? mvp.name : null, win };
     if (win) S.tp += 3;
+    pushArticle({ tag: '올스타', title: `올스타전 ${win ? gs.mine.name : gs.theirs.name} 승리`, sub: mvp ? `MVP ${mvp.name}` : '', body: `${gs.mine.name} ${gs.mine.score} : ${gs.theirs.score} ${gs.theirs.name}. ${mvp ? 'MVP는 ' + mvp.name + ' 선수가 차지했다.' : ''}` });
     dirty = true;
   }
   function autoAllStar() {
@@ -814,6 +884,7 @@ function createService(seed) {
     });
     r.get.forEach(p => { joinMyTeam(p); p.morale = 65; voice(p, say(0, '새 팀에서 최선을 다하겠습니다!', '불러 주셔서 감사합니다. 바로 보여드릴게요.'), 'happy'); });
     S.trades = (S.trades || []).concat([{ day: S.day, team: t.name, give: r.give.map(p => p.name), get: r.get.map(p => p.name) }]).slice(-20);
+    pushArticle({ tag: '트레이드', title: `${shortTeam(myTeam().name)}·${shortTeam(t.name)} 트레이드 단행`, sub: `${r.give.map(p => p.name).join(', ')} ↔ ${r.get.map(p => p.name).join(', ')}`, body: `${myTeam().name}${hasBatchim(myTeam().name) ? '이' : '가'} ${t.name}와 선수를 맞바꿨다. ${r.give.map(p => p.name).join(', ')} 선수를 보내고 ${r.get.map(p => p.name).join(', ')} 선수를 받았다.` });
     dirty = true;
     return [200, { message: r.message, give: r.give.map(p => p.name), get: r.get.map(p => p.name) }];
   }
@@ -1106,7 +1177,7 @@ function createService(seed) {
     const pl = Object.values(S.players).map(p => [p.id, p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era, p.fatigue, p.first || 0, p.last || 0, p.most || '',
       p.morale === undefined ? null : p.morale, p.birthYear || 0, p.rookie ? 1 : 0, p.ageSet ? 1 : 0]);
     const teams = S.teams.map(t => ({ id: t.id, name: t.name, user: t.user, group: t.group, league: t.league, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak, roster: t.roster.map(p => p.id) }));
-    return { version: 5, started: S.started !== false, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null, offers: S.offers || [], offerDay: S.offerDay || 0,
+    return { version: 5, articles: S.articles || [], started: S.started !== false, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null, offers: S.offers || [], offerDay: S.offerDay || 0,
       devReport: S.devReport || null, mode: S.mode, year: S.year, length: S.length, difficulty: S.difficulty, day: S.day, tp: S.tp, done: S.done, champion: S.champion,
       recent: S.recent, news: S.news, schedule: S.schedule, stats: S.stats, players: pl, teams };
   }
@@ -1126,7 +1197,7 @@ function createService(seed) {
       if (b) { p.person = at < 0 ? b.person : `${b.person}@${vid.slice(at + 1)}`; p.country = b.country; p.sub = b.sub; if (!p.birthYear) p.birthYear = b.birthYear; } else { p.person = p.id; p.sub = null; }
     });
     const teams = o.teams.map(t => ({ group: '', league: o.league || 'KBO', ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
-    S = { version: 4, league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
+    S = { version: 4, articles: o.articles || [], league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
       voices: o.voices || [], trades: o.trades || [], draft: o.draft && o.draft.pool.every(r => DB_BY_ID.has(r[8] || r[0])) ? o.draft : null,   // 옛 가상 신인 드래프트 저장은 버림
       devReport: o.devReport || null, offers: o.offers || [], offerDay: o.offerDay || 0,
       mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
@@ -1170,6 +1241,7 @@ function createService(seed) {
     else if (key === 'GET api/draft') res = [200, draftView()];
     else if (key === 'POST api/draft/pick') res = draftPick(body);
     else if (key === 'POST api/draft/auto') res = draftAutoAll();
+    else if (key === 'GET api/articles') res = [200, { articles: (S.articles || []).slice(0, 40) }];
     else if (key === 'GET api/locker') res = [200, { voices: (S.voices || []).slice().reverse(),
       roster: myTeam().roster.map(p => { joinMyTeam(p); return { name: p.name, pos: p.pos, morale: p.morale, mood: moodOf(p.morale), age: p.age }; })
         .sort((a, b) => a.morale - b.morale) }];

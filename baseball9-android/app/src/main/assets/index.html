@@ -3,26 +3,26 @@
 <style>
   /* 레이아웃: 야간 경기장 전광판. 위에서 아래로 스코어 → 감독 판단 배너 → 그라운드 → 중계 → 작전 버튼 */
   :root {
-    --bg: #07110b;          /* 야간 경기장 바닥 */
-    --panel: #0f1d16;       /* 더그아웃 패널 */
-    --panel-2: #142a1f;
-    --line: #23402f;
-    --text: #e6efe9;
-    --dim: #93a99c;
-    --muted: #61786b;
-    --board: #021006;       /* 전광판 */
-    --led: #7cf29a;         /* 전광판 숫자 */
-    --gold: #f2b134;        /* 감독 지시 */
-    --red: #f05a4f;
-    --blue: #5cc3f2;
-    --yellow: #f5d547;
+    --bg: #131a29;          /* 야구9단 클래식: 네이비 바탕 + 오렌지 포인트 */
+    --panel: #1b2437;
+    --panel-2: #243048;
+    --line: #34425f;
+    --text: #eaf0fa;
+    --dim: #aab6cc;
+    --muted: #7f8ca6;
+    --board: #0f1726;
+    --led: #ffffff;
+    --gold: #ff7a1a;        /* 포인트(오렌지) */
+    --red: #ff5a4f;
+    --blue: #5ea8ff;
+    --yellow: #ffd54a;
     --violet: #b39cf5;
-    --orange: #fb9a4b;
-    --btn: #22382c;
-    --btn-order: #5a3d0c;
-    --btn-auto: #136e5a;
-    --btn-stop: #a1281f;
-    --btn-end: #6e2a14;
+    --orange: #ff9a4b;
+    --btn: #2c3a57;
+    --btn-order: #7a4410;
+    --btn-auto: #1f6fd1;
+    --btn-stop: #b8332a;
+    --btn-end: #7a3a1a;
     --font: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     color-scheme: dark;
@@ -35,8 +35,9 @@
     padding-right: max(12px, env(safe-area-inset-right, 0px));
     padding-block: 0 24px;
   }
-  header { display: flex; align-items: center; gap: 10px; padding-block: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
-  header h1 { font-size: 16px; margin: 0; color: var(--gold); letter-spacing: .02em; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; flex-wrap: wrap; background: #0a101c; border-bottom: 3px solid var(--gold); margin: 0 -12px 12px; }
+  header h1 { font-size: 17px; margin: 0; color: #fff; letter-spacing: .02em; }
+  header h1 b { color: var(--gold); }
   header .spacer { flex: 1; }
   header .info { color: var(--dim); font-size: 13px; font-variant-numeric: tabular-nums; }
   main { max-width: 1120px; margin: 0 auto; }
@@ -51,7 +52,7 @@
   }
   button:focus-visible, select:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   button:disabled { opacity: .35; cursor: not-allowed; }
-  button.gold { background: var(--gold); color: #1a1205; font-weight: 700; }
+  button.gold { background: var(--gold); color: #fff; font-weight: 800; }
   button.auto { background: var(--btn-auto); font-weight: 700; }
   button.stop { background: var(--btn-stop); font-weight: 700; }
   button.end { background: var(--btn-end); }
@@ -69,7 +70,7 @@
   .scroll-x { overflow-x: auto; }
 
   /* 전광판 */
-  .board { background: var(--board); border: 1px solid #1d5a32; border-radius: 10px; padding: 10px; margin-bottom: 10px; text-align: center; }
+  .board { background: var(--board); border: 1px solid #34425f; border-radius: 10px; padding: 10px; margin-bottom: 10px; text-align: center; }
   .board .teams { display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap; }
   .board .name { color: var(--led); font-weight: 700; font-size: 14px; }
   .board .big { color: var(--led); font-weight: 800; font-size: 30px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
@@ -81,8 +82,8 @@
   .linescore .r { color: var(--led); font-weight: 700; }
 
   .banner { padding: 9px 12px; border-radius: 8px; margin-bottom: 10px; font-weight: 600; font-size: 13px; background: var(--panel-2); color: var(--dim); }
-  .banner.alert { background: var(--gold); color: #1a1205; }
-  .banner.auto { background: #11493c; color: var(--text); }
+  .banner.alert { background: var(--gold); color: #fff; }
+  .banner.auto { background: #1b4d86; color: var(--text); }
   .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: #2a1512; color: #ffd9d5; border: 1px solid var(--red); padding: 10px 14px; border-radius: 8px; font-size: 13px; max-width: calc(100% - 32px); z-index: 20; }
 
   .gameLayout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; }
@@ -106,11 +107,11 @@
   .nv-tabs button.on { background: #2f7de1; color: #fff; }
   .nv-tabs button .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #ff5a4f; vertical-align: top; margin-left: 2px; }
   details.ls { margin-top: 10px; }
-  #log { height: 250px; overflow-y: auto; background: #000d04; border: 1px solid #16391f; border-radius: 10px; padding: 8px 10px; font-family: var(--mono); font-size: 12.5px; margin-top: 10px; }
+  #log { height: 250px; overflow-y: auto; background: #0e1524; border: 1px solid #2a3957; border-radius: 10px; padding: 8px 10px; font-family: var(--mono); font-size: 12.5px; margin-top: 10px; }
   #log div { margin-bottom: 3px; line-height: 1.5; overflow-wrap: anywhere; }
   .k-PITCH { color: var(--text); } .k-HIT { color: var(--led); font-weight: 700; } .k-OUT { color: #c6d3cb; }
   .k-WALK { color: var(--blue); } .k-STEAL { color: var(--yellow); } .k-MANAGER { color: var(--gold); font-weight: 700; }
-  .k-COLOR { color: var(--violet); font-style: italic; } .k-INNING { color: var(--orange); font-weight: 700; border-top: 1px solid #16391f; padding-top: 4px; }
+  .k-COLOR { color: var(--violet); font-style: italic; } .k-INNING { color: var(--orange); font-weight: 700; border-top: 1px solid #2a3957; padding-top: 4px; }
   .k-SCORE { color: var(--red); font-weight: 700; } .k-END { color: var(--gold); font-size: 15px; font-weight: 700; } .k-NEUTRAL { color: var(--dim); }
   .side { font-size: 13px; }
   .side li { padding: 2px 0; }
@@ -122,7 +123,7 @@
   .order-item button { flex: none; }
   .controls .full { grid-column: 1 / -1; }
   .box td, .box th { font-size: 12.5px; }
-  .hpbar { height: 6px; background: #1d3327; border-radius: 3px; overflow: hidden; margin: 3px 0; }
+  .hpbar { height: 6px; background: #2a3957; border-radius: 3px; overflow: hidden; margin: 3px 0; }
   .hpbar > i { display: block; height: 100%; }
 
   [hidden] { display: none !important; }
@@ -142,15 +143,35 @@
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 
   /* 탭 + 시즌 화면 */
-  nav.tabs { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px; }
-  nav.tabs button { min-height: 40px; padding: 6px 4px; font-size: 13px; background: var(--panel); border-color: var(--line); }
-  nav.tabs button[aria-current="page"] { background: var(--panel-2); color: var(--gold); border-color: var(--gold); font-weight: 700; }
+  nav.tabs { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; margin-bottom: 12px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px; }
+  nav.tabs button { min-height: 40px; padding: 6px 4px; font-size: 13px; background: #222d44; border: 0; border-radius: 6px 6px 0 0; border-top: 3px solid transparent; color: var(--dim); }
+  nav.tabs button[aria-current="page"] { background: #fff; color: #14203a; border-top-color: var(--gold); font-weight: 800; }
   body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
   .today { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; text-align: center; margin-block: 8px 12px; }
   .today .tn { font-weight: 700; font-size: 15px; }
   .today .str { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
   .today .vs { color: var(--gold); font-weight: 800; font-size: 18px; }
   .stand td, .stand th { font-size: 13px; padding: 5px 6px; white-space: nowrap; }
+  /* 팀 순위표: 흰 카드, 굵은 이탤릭 순위, 팀 배지 (KBO 순위표 스타일) */
+  #fullStand, #miniStand { background: #fff; color: #1f2430; width: 100%; border-radius: 8px; overflow: hidden; }
+  #fullStand th, #miniStand th { color: #a6adbb; font-weight: 500; text-align: right; padding: 10px 8px; border-bottom: 1px solid #eceff4; }
+  #fullStand td, #miniStand td { text-align: right; padding: 12px 8px; border-bottom: 1px solid #eceff4; font-size: 15px; }
+  #fullStand td.rk, #miniStand td.rk { font-style: italic; font-weight: 800; font-size: 18px; text-align: center; width: 36px; }
+  #fullStand td.t, #miniStand td.t { text-align: left; font-weight: 800; }
+  #fullStand th:nth-child(2), #miniStand th:nth-child(2) { text-align: left; }
+  #fullStand tr.me td, #miniStand tr.me td { color: #2f7de1; font-weight: 800; }
+  .stand .badge.sm { width: 26px; height: 26px; font-size: 11px; border-width: 1px; margin-right: 8px; vertical-align: middle; }
+  .stand .tn { vertical-align: middle; }
+  /* 기사 카드: 신문 기사 느낌 */
+  .article { background: #fff; color: #1f2430; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+  .article .tag { display: inline-block; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background: #fff0e3; color: #d85a00; margin-bottom: 6px; }
+  .article h3 { margin: 0 0 4px; font-size: 18px; line-height: 1.35; }
+  .article .sub { color: #556178; font-size: 13.5px; font-weight: 600; margin-bottom: 8px; }
+  .article p { margin: 0; font-size: 14px; line-height: 1.65; color: #2b3345; }
+  .article .meta { margin-top: 8px; color: #8a94a8; font-size: 12px; }
+  .headline { padding: 8px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .headline:last-child { border-bottom: 0; }
+  .headline b { display: block; font-size: 14px; } .headline span { color: var(--dim); font-size: 12.5px; }
   .stand td.t { text-align: left; white-space: nowrap; }
   .stand tr.me td { color: var(--gold); font-weight: 700; }
   .stats td, .stats th { font-size: 12.5px; padding: 4px 6px; white-space: nowrap; }
@@ -166,11 +187,22 @@
   .train-row .sub { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
   .savebar { color: var(--muted); font-size: 12px; margin-top: 4px; }
   .newsline { font-size: 13px; padding-block: 2px; font-variant-numeric: tabular-nums; }
+  .bigmsg { text-align: center; font-size: clamp(16px, 4.2vw, 24px); font-weight: 800; margin: 6px 0 14px; line-height: 1.5; }
+  .bigmsg b { color: var(--gold); }
+  .leagues { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .leagues button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 4px; background: linear-gradient(180deg, #232f48, #182136); border: 2px solid #2d3b59; border-radius: 10px; min-height: 96px; }
+  .leagues button i { font-style: normal; font-size: 30px; }
+  .leagues button b { font-size: 14px; } .leagues button span { font-size: 11px; color: var(--muted); }
+  .leagues button.on { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(255,122,26,.35); }
+  .leagues button.on span { color: var(--gold); }
+  #pickTeams { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 10px; }
+  #pickTeams .team-card { margin-bottom: 0; grid-template-columns: 1fr; }
+  #pickTeams .team-card > button { width: 100%; }
   .team-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
   .team-card .tn2 { font-weight: 700; font-size: 15px; }
   .team-card .grp { color: var(--muted); font-size: 12px; margin-left: 6px; font-weight: 400; }
   .team-card .power { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; margin: 4px 0; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .team-card .power .bar { height: 8px; background: #1d3327; border-radius: 4px; overflow: hidden; }
+  .team-card .power .bar { height: 8px; background: #2a3957; border-radius: 4px; overflow: hidden; }
   .team-card .power .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--led)); }
   .team-card .roster-line { font-size: 12px; color: var(--dim); line-height: 1.55; }
   .team-card .roster-line b { color: var(--text); font-weight: 600; }
@@ -190,7 +222,7 @@
   .voice { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; padding-block: 6px; border-bottom: 1px solid var(--line); font-size: 13px; }
   .voice:last-child { border-bottom: 0; }
   .voice .who { color: var(--dim); font-size: 12px; }
-  .voice.happy .txt { color: #c9f7d6; } .voice.sad .txt { color: #c7d2e0; } .voice.angry .txt { color: #ffb4ab; }
+  .voice.happy .txt { color: #bff0d0; } .voice.sad .txt { color: #c7d2e0; } .voice.angry .txt { color: #ffb4ab; }
   .trade-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .trade-cols > div { min-width: 0; max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
   .trade-cols label { display: flex; gap: 6px; align-items: flex-start; padding-block: 5px; font-size: 13px; border-bottom: 1px solid var(--line); cursor: pointer; }
@@ -199,12 +231,12 @@
   .meter { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; margin-block: 10px; font-variant-numeric: tabular-nums; }
   .meter .bar { height: 10px; background: var(--panel-2); border-radius: 5px; overflow: hidden; }
   .meter .bar i { display: block; height: 100%; }
-  @media (max-width: 520px) { nav.tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); } .trade-cols { grid-template-columns: 1fr; } }
+  @media (max-width: 520px) { nav.tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); } .trade-cols { grid-template-columns: 1fr; } }
   @media (max-width: 520px) { nav.tabs button { font-size: 11px; padding: 6px 1px; } .scout-filters { grid-template-columns: 1fr 1fr; } .scout-filters input { grid-column: 1 / -1; } }
 </style>
 
 <header>
-  <h1>⚾ 야구9단 매니저</h1>
+  <h1>⚾ <b>야구9단</b> 매니저</h1>
   <span class="info" id="seasonInfo"></span>
   <span class="spacer"></span>
   <span class="info" id="recordInfo"></span>
@@ -215,6 +247,7 @@
     <button data-tab="home">🏠 홈</button>
     <button data-tab="play">⚾ 경기</button>
     <button data-tab="stand">📊 순위</button>
+    <button data-tab="news">📰 기사</button>
     <button data-tab="stats">📈 기록</button>
     <button data-tab="train">💪 훈련</button>
     <button data-tab="scout">🔍 영입</button>
@@ -225,11 +258,18 @@
   <!-- 팀 선택 -->
   <section id="pick" hidden>
     <div class="panel">
-      <p class="title">⚾ 맡을 팀을 고르세요</p>
-      <p class="muted" style="margin:0 0 10px">고른 팀의 <b>실제 선수들</b>이 기본 로스터가 됩니다. 팀마다 전력과 스타 선수가 다릅니다. 시작한 뒤에는 영입·트레이드·드래프트·육성으로 팀을 키워 갑니다.</p>
+      <p class="bigmsg">최고의 감독이 될 준비가 되셨나요?<br>이제 본격적으로 <b>리그</b>를 시작합니다!</p>
+      <div class="leagues" id="leagueTiles">
+        <button data-lg="KBO" class="on"><i>🇰🇷</i><b>KBO</b><span>한국 10팀</span></button>
+        <button data-lg="NPB"><i>🇯🇵</i><b>NPB</b><span>일본 12팀</span></button>
+        <button data-lg="MLB"><i>🇺🇸</i><b>MLB</b><span>미국 30팀</span></button>
+        <button data-lg="ALL"><i>🌐</i><b>통합 리그</b><span>3개 리그 52팀</span></button>
+        <button data-lg="WORLD"><i>🏆</i><b>월드 리그</b><span>세 리그 강팀 12팀</span></button>
+      </div>
+      <p class="muted" style="margin:10px 0">고른 팀의 <b>실제 선수들</b>이 기본 로스터가 됩니다. 팀마다 전력과 스타 선수가 다릅니다. 시작한 뒤에는 영입·트레이드·드래프트·육성으로 팀을 키워 갑니다.</p>
       <div class="row">
-        <label class="lbl" for="pickLeague">리그</label>
-        <select id="pickLeague">
+        <label class="lbl" for="pickLeague" hidden>리그</label>
+        <select id="pickLeague" hidden>
           <option value="KBO" selected>KBO (한국 10팀)</option>
           <option value="NPB">NPB (일본 12팀)</option>
           <option value="MLB">MLB (미국 30팀)</option>
@@ -295,6 +335,7 @@
     <div class="panel" id="offerHome" hidden><p class="title">📨 트레이드 제안</p><p id="offerHomeText" style="margin:0 0 8px"></p><button class="gold sm" id="goOffers">제안 보기</button></div>
     <div class="panel"><p class="title">🗣 라커룸</p><div id="homeVoices" class="muted"></div>
       <button class="sm" id="goLocker" style="margin-top:8px">라커룸 전체 보기</button></div>
+    <div class="panel" id="newsHome"><p class="title">📰 오늘의 기사</p><div id="newsHomeList"></div><button class="sm" id="goNews" style="margin-top:8px">기사 전체 보기</button></div>
     <div class="panel"><p class="title">순위 (상위 5)</p><div class="scroll-x"><table class="stand" id="miniStand"></table></div></div>
     <div class="panel">
       <p class="title">🔁 다른 팀으로 새로 시작</p>
@@ -405,6 +446,11 @@
   </section>
 
   <!-- 순위 -->
+  <!-- 기사 -->
+  <section id="news" hidden>
+    <div class="panel"><p class="title">📰 야구9단 스포츠 · 오늘의 기사</p><div id="newsFeed"></div></div>
+  </section>
+
   <section id="stand" hidden>
     <div class="panel"><p class="title" id="standTitle"></p><div class="scroll-x"><table class="stand" id="fullStand"></table></div></div>
   </section>
@@ -34052,8 +34098,9 @@ function createService(seed) {
       stats: {}, tp: keep && S ? S.tp : 10, recent: [], news: [], done: false, champion: null,
       allStar: { day: length >= 18 ? Math.floor(length / 2) : -1, done: false, result: null },
       intl: S && S.intl || null, voices: carry ? carry.voices : [], trades: carry ? carry.trades : [],
-      draft: null, devReport, offers: [], offerDay: 0,
+      draft: null, devReport, offers: [], offerDay: 0, articles: keep && S ? (S.articles || []) : [],
     };
+    prevLeader = null;
     if (!keep) {
       teams.forEach(t => t.roster.forEach(p => { p.ageSet = false; delete p.morale; initAge(p); p.ageSet = true; }));
       myTeam().roster.forEach(joinMyTeam);
@@ -34157,7 +34204,69 @@ function createService(seed) {
   }
 
   // 사용자 경기가 끝나면 그날 나머지 경기를 모두 진행하고 다음 날로
+  // ── 기사 (경기·리그 소식을 신문 기사처럼) ──
+  const hasBatchim = w => { const c = String(w).trim().slice(-1).charCodeAt(0); return c >= 0xAC00 && c <= 0xD7A3 ? (c - 0xAC00) % 28 !== 0 : false; };
+  const scoreJosa = (n) => ([0, 3, 6].includes(Number(n) % 10) ? '으로' : '로');         // 4-1로 / 3-0으로
+  const josa = (w, a, b) => `${w}${hasBatchim(w) ? a : b}`;                          // 이/가, 은/는, 을/를
+  const shortTeam = n => String(n).replace(/(타이거즈|라이온즈|트윈스|베어스|위즈|랜더스|자이언츠|이글스|다이노스|히어로즈)$/, '');
+  function pushArticle(a) {
+    S.articles = S.articles || [];
+    S.articles.unshift({ day: S.day + 1, year: S.year, ...a });
+    if (S.articles.length > 80) S.articles.length = 80;
+  }
+  const batScore = x => (x.hr || 0) * 4 + (x.h || 0) * 2 + (x.rbi || 0) * 2 + (x.r || 0);
+  const batLine = x => `${x.ab || 0}타수 ${x.h || 0}안타` + (x.hr ? ` ${x.hr}홈런` : '') + (x.rbi ? ` ${x.rbi}타점` : '');
+  function streakOf() {                       // 우리 팀의 현재 연승/연패 (최근 경기 기준)
+    const r = S.recent || [];
+    let n = 0;
+    for (let i = r.length - 1; i >= 0 && r[i].result === r[r.length - 1].result; i--) n++;
+    return { n, win: r.length ? r[r.length - 1].result === '승' : true };
+  }
+  function gameArticle(e, opp, win) {
+    const gs = e.gs, me = myTeam(), my = gs.mine.score, op = gs.theirs.score, diff = Math.abs(my - op);
+    const A = shortTeam(me.name), B = shortTeam(opp.name), st = streakOf();
+    const lineup = gs.mine.lineup, stat = p => e.bat.get(p.id) || {};
+    const hero = [...lineup].sort((a, b) => batScore(stat(b)) - batScore(stat(a)))[0];
+    const foe = [...gs.theirs.lineup].sort((a, b) => batScore(stat(b)) - batScore(stat(a)))[0];
+    const sp = gs.mine.pitcherLines[0], osp = gs.theirs.pitcherLines[0];
+    let title;
+    if (win) {
+      title = st.n >= 3 ? `${A} ${st.n}연승 질주… ${josa(B, '을', '를')} 제압` : diff >= 6 ? `${A}, ${B}에 ${my}-${op} 대승`
+        : diff === 1 ? `${A}, ${B} 1점차 진땀승` : `${A}, ${josa(B, '을', '를')} 꺾고 승리`;
+    } else {
+      title = st.n >= 3 ? `${A} ${st.n}연패 수렁… ${josa(B, '에게', '에게')} 무릎` : diff >= 6 ? `${A}, ${B}에 ${my}-${op} 완패`
+        : diff === 1 ? `${A}, ${B}에 1점차 석패` : `${A}, ${B}에 덜미`;
+    }
+    const sub = hero && batScore(stat(hero)) > 0 ? `${hero.name} ${batLine(stat(hero))}` : (sp ? `선발 ${sp.pitcher.name} ${sp.inningsText}이닝 ${sp.runs}실점` : '');
+    const rank = standings().find(r => r.user);
+    const parts = [`${josa(A, '이', '가')} ${S.day + 1}일차 경기에서 ${josa(B, '을', '를')} ${my}-${op}${scoreJosa(op)} ${win ? '꺾었다' : '졌다'}.`];
+    if (hero && batScore(stat(hero)) > 0) parts.push(`${josa(hero.name, '은', '는')} ${batLine(stat(hero))}으로 팀 타선을 이끌었다.`);
+    if (sp) parts.push(`선발 ${sp.pitcher.name}${hasBatchim(sp.pitcher.name) ? '은' : '는'} ${sp.inningsText}이닝 ${sp.hits}피안타 ${sp.strikeouts}탈삼진 ${sp.runs}실점을 기록했다.`);
+    if (!win && foe && batScore(stat(foe)) > 0) parts.push(`${B}에서는 ${foe.name}이(가) ${batLine(stat(foe))}으로 맹활약했다.`);
+    if (osp && win) parts.push(`${B} 선발 ${osp.pitcher.name}${hasBatchim(osp.pitcher.name) ? '은' : '는'} ${osp.inningsText}이닝 ${osp.runs}실점${osp.runs >= 4 ? '으로 무너졌다' : '으로 호투했지만 타선 지원을 받지 못했다'}.`);
+    parts.push(`이로써 ${A}${hasBatchim(A) ? '은' : '는'} ${me.w}승 ${me.l}패로 ${rank ? rank.rank : '-'}위를 기록했다.${st.n >= 2 ? ` (${st.n}${st.win ? '연승' : '연패'} 중)` : ''}`);
+    pushArticle({ tag: '우리 팀', title, sub, body: parts.join(' ') });
+  }
+  let prevLeader = null;
+  function leagueArticles(results) {         // results: [{a, b, sa, sb}] 오늘 다른 구장 결과
+    if (results.length) {
+      const big = [...results].sort((x, y) => Math.abs(y.sa - y.sb) + (y.sa + y.sb) * 0.1 - Math.abs(x.sa - x.sb) - (x.sa + x.sb) * 0.1)[0];
+      const w = big.sa > big.sb ? big.a : big.b, l = w === big.a ? big.b : big.a, hi = Math.max(big.sa, big.sb), lo = Math.min(big.sa, big.sb);
+      pushArticle({ tag: '리그', title: hi + lo >= 14 ? `${shortTeam(w)}, ${shortTeam(l)}와 ${hi}-${lo} 난타전 끝에 승리` : `${shortTeam(w)}, ${shortTeam(l)}에 ${hi}-${lo} 승리`,
+        sub: `${S.day + 1}일차 리그 소식`, body: `${josa(shortTeam(w), '이', '가')} ${josa(shortTeam(l), '을', '를')} ${hi}-${lo}${scoreJosa(lo)} 꺾었다.` });
+    }
+    const top = standings()[0];
+    if (prevLeader && top.name !== prevLeader && S.day >= 2) pushArticle({ tag: '순위', title: `${shortTeam(top.name)}, 선두 탈환`, sub: `${top.w}승 ${top.l}패`, body: `${josa(shortTeam(top.name), '이', '가')} ${top.w}승 ${top.l}패로 단독 선두에 올랐다. 이전 선두는 ${shortTeam(prevLeader)}.` });
+    prevLeader = top.name;
+    if ((S.day + 1) % 5 === 0) {              // 5일마다 개인 기록 소식
+      const bats = Object.values(S.players).map(batRow).filter(b => b && b.pa >= 15);
+      const hr = [...bats].sort((a, b) => b.hr - a.hr || b.h - a.h)[0];
+      if (hr && hr.hr > 0) pushArticle({ tag: '기록', title: `${hr.name}, ${hr.hr}홈런으로 홈런 선두`, sub: `${hr.team} · 타율 ${hr.avg.toFixed(3).replace(/^0/, '')}`, body: `${hr.team}의 ${hr.name}${hasBatchim(hr.name) ? '이' : '가'} 시즌 ${hr.hr}홈런 ${hr.rbi}타점을 기록하며 홈런 부문 선두를 달리고 있다. 타율은 ${hr.avg.toFixed(3).replace(/^0/, '')}.` });
+    }
+  }
+
   function finishDay(userEngine) {
+    let userWin = null, userOpp = null;
     if (userEngine) {
       const opp = team(todayMatch());
       const mine = myTeam(), gs = userEngine.gs;
@@ -34167,8 +34276,9 @@ function createService(seed) {
       S.recent.push({ day: S.day + 1, opponent: opp.name, result: win ? '승' : '패', score: `${gs.mine.score}:${gs.theirs.score}` });
       S.recent = S.recent.slice(-10);
       S.tp += win ? 3 : 2;                       // 훈련 포인트
+      userWin = win; userOpp = opp;
     } else S.tp += 1;                            // 휴식일
-    const news = [];
+    const news = [], others = [];
     S.schedule[S.day].forEach(([a, b]) => {
       if (a === 0 || b === 0 || isGhost(a) || isGhost(b)) return;
       const e = buildGame(team(a), team(b));
@@ -34176,14 +34286,18 @@ function createService(seed) {
       e.run(MODE.GAME);
       recordGame(e, team(a), team(b));
       news.push(`${team(a).name} ${e.gs.mine.score} : ${e.gs.theirs.score} ${team(b).name}`);
+      others.push({ a: team(a).name, b: team(b).name, sa: e.gs.mine.score, sb: e.gs.theirs.score });
     });
     S.news = news;
+    if (userEngine) gameArticle(userEngine, userOpp, userWin);
+    leagueArticles(others);
     S.teams.forEach(t => updateDailyCondition(t.roster, rng));
     S.day++;
     if (S.day < S.length && S.day % 4 === 0 && S.offerDay !== S.day) genOffers();
     if (S.day >= S.length) {
       S.done = true;
       S.champion = standings()[0].name;
+      pushArticle({ tag: '시즌', title: `${shortTeam(S.champion)}, ${S.year} 시즌 우승`, sub: `${S.length}경기 대장정 마무리`, body: `${josa(S.champion, '이', '가')} ${S.year} 시즌 정상에 올랐다. 우리 팀 ${myTeam().name}은(는) ${standings().find(r => r.user).rank}위로 시즌을 마쳤다.` });
       openDraft();                           // 시즌이 끝나면 신인 드래프트 개막
     }
     dirty = true;
@@ -34245,6 +34359,7 @@ function createService(seed) {
       myStrength: teamStrength(myTeam()),
       standings: standings(), recent: S.recent.slice(-5).reverse(), news: S.news,
       offerCount: (S.offers || []).length,
+      latestNews: (S.articles || []).slice(0, 3),
       voices: (S.voices || []).slice(-4).reverse(), draftOpen: !!S.draft && S.draft.pick < S.draft.order.length * S.draft.rounds,
       devReport: S.devReport || null,
     };
@@ -34469,6 +34584,7 @@ function createService(seed) {
     })[0];
     S.allStar = { ...S.allStar, done: true, result: `${gs.mine.name} ${gs.mine.score} : ${gs.theirs.score} ${gs.theirs.name}`, mvp: mvp ? mvp.name : null, win };
     if (win) S.tp += 3;
+    pushArticle({ tag: '올스타', title: `올스타전 ${win ? gs.mine.name : gs.theirs.name} 승리`, sub: mvp ? `MVP ${mvp.name}` : '', body: `${gs.mine.name} ${gs.mine.score} : ${gs.theirs.score} ${gs.theirs.name}. ${mvp ? 'MVP는 ' + mvp.name + ' 선수가 차지했다.' : ''}` });
     dirty = true;
   }
   function autoAllStar() {
@@ -34725,6 +34841,7 @@ function createService(seed) {
     });
     r.get.forEach(p => { joinMyTeam(p); p.morale = 65; voice(p, say(0, '새 팀에서 최선을 다하겠습니다!', '불러 주셔서 감사합니다. 바로 보여드릴게요.'), 'happy'); });
     S.trades = (S.trades || []).concat([{ day: S.day, team: t.name, give: r.give.map(p => p.name), get: r.get.map(p => p.name) }]).slice(-20);
+    pushArticle({ tag: '트레이드', title: `${shortTeam(myTeam().name)}·${shortTeam(t.name)} 트레이드 단행`, sub: `${r.give.map(p => p.name).join(', ')} ↔ ${r.get.map(p => p.name).join(', ')}`, body: `${myTeam().name}${hasBatchim(myTeam().name) ? '이' : '가'} ${t.name}와 선수를 맞바꿨다. ${r.give.map(p => p.name).join(', ')} 선수를 보내고 ${r.get.map(p => p.name).join(', ')} 선수를 받았다.` });
     dirty = true;
     return [200, { message: r.message, give: r.give.map(p => p.name), get: r.get.map(p => p.name) }];
   }
@@ -35017,7 +35134,7 @@ function createService(seed) {
     const pl = Object.values(S.players).map(p => [p.id, p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era, p.fatigue, p.first || 0, p.last || 0, p.most || '',
       p.morale === undefined ? null : p.morale, p.birthYear || 0, p.rookie ? 1 : 0, p.ageSet ? 1 : 0]);
     const teams = S.teams.map(t => ({ id: t.id, name: t.name, user: t.user, group: t.group, league: t.league, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak, roster: t.roster.map(p => p.id) }));
-    return { version: 5, started: S.started !== false, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null, offers: S.offers || [], offerDay: S.offerDay || 0,
+    return { version: 5, articles: S.articles || [], started: S.started !== false, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null, offers: S.offers || [], offerDay: S.offerDay || 0,
       devReport: S.devReport || null, mode: S.mode, year: S.year, length: S.length, difficulty: S.difficulty, day: S.day, tp: S.tp, done: S.done, champion: S.champion,
       recent: S.recent, news: S.news, schedule: S.schedule, stats: S.stats, players: pl, teams };
   }
@@ -35037,7 +35154,7 @@ function createService(seed) {
       if (b) { p.person = at < 0 ? b.person : `${b.person}@${vid.slice(at + 1)}`; p.country = b.country; p.sub = b.sub; if (!p.birthYear) p.birthYear = b.birthYear; } else { p.person = p.id; p.sub = null; }
     });
     const teams = o.teams.map(t => ({ group: '', league: o.league || 'KBO', ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
-    S = { version: 4, league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
+    S = { version: 4, articles: o.articles || [], league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
       voices: o.voices || [], trades: o.trades || [], draft: o.draft && o.draft.pool.every(r => DB_BY_ID.has(r[8] || r[0])) ? o.draft : null,   // 옛 가상 신인 드래프트 저장은 버림
       devReport: o.devReport || null, offers: o.offers || [], offerDay: o.offerDay || 0,
       mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
@@ -35081,6 +35198,7 @@ function createService(seed) {
     else if (key === 'GET api/draft') res = [200, draftView()];
     else if (key === 'POST api/draft/pick') res = draftPick(body);
     else if (key === 'POST api/draft/auto') res = draftAutoAll();
+    else if (key === 'GET api/articles') res = [200, { articles: (S.articles || []).slice(0, 40) }];
     else if (key === 'GET api/locker') res = [200, { voices: (S.voices || []).slice().reverse(),
       roster: myTeam().roster.map(p => { joinMyTeam(p); return { name: p.name, pos: p.pos, morale: p.morale, mood: moodOf(p.morale), age: p.age }; })
         .sort((a, b) => a.morale - b.morale) }];
@@ -35172,7 +35290,7 @@ function createService(seed) {
   }
 
   // ── 탭 ──
-  const SECTIONS = ['pick', 'home', 'setup', 'game', 'result', 'stand', 'stats', 'train', 'scout', 'intl', 'office'];
+  const SECTIONS = ['news', 'pick', 'home', 'setup', 'game', 'result', 'stand', 'stats', 'train', 'scout', 'intl', 'office'];
   function show(section) {
     SECTIONS.forEach(s => { $(s).hidden = s !== section; });
   }
@@ -35189,6 +35307,7 @@ function createService(seed) {
       show(tab);
       if (tab === 'home') renderHome();
       if (tab === 'stand') renderStand();
+      if (tab === 'news') renderNews();
       if (tab === 'stats') renderStats();
       if (tab === 'train') renderTrain();
       if (tab === 'scout') renderScout();
@@ -35211,13 +35330,21 @@ function createService(seed) {
   // ── 홈 ──
   let multiLg = false;      // 통합·월드 리그: 순위표에 소속 리그 표시
   function standRows(rows) {
-    let h = '<tr><th>순위</th><th style="text-align:left">팀</th><th>경기</th><th>승</th><th>패</th><th>승률</th><th>차</th><th>득</th><th>실</th><th>연속</th></tr>';
+    let h = '<tr><th></th><th></th><th>경기</th><th>승</th><th>패</th><th>승률</th><th>게임차</th></tr>';
     rows.forEach(t => {
-      h += `<tr class="${t.user ? 'me' : ''}"><td>${t.rank}</td><td class="t">${esc(t.name)}${multiLg ? lgTag(t.league) : ''}</td><td>${t.w + t.l}</td><td>${t.w}</td><td>${t.l}</td>` +
-        `<td>${t.pct.toFixed(3).replace(/^0/, '')}</td><td>${t.gb === 0 ? '-' : t.gb.toFixed(1)}</td><td>${t.rs}</td><td>${t.ra}</td><td>${esc(t.streak || '-')}</td></tr>`;
+      const bd = `<i class="badge sm" style="background:${teamColor(t.name)}">${esc((t.name.match(/^[A-Z]{2,3}/) || [t.name.charAt(0)])[0])}</i>`;
+      h += `<tr class="${t.user ? 'me' : ''}"><td class="rk">${t.rank}</td><td class="t">${bd}<span class="tn">${esc(shortName(t.name))}</span>${multiLg ? lgTag(t.league) : ''}</td><td>${t.w + t.l}</td><td>${t.w}</td><td>${t.l}</td>` +
+        `<td>${t.pct.toFixed(3).replace(/^0/, '')}</td><td>${t.gb === 0 ? '0' : t.gb.toFixed(1).replace(/\.0$/, '')}</td></tr>`;
     });
     return h;
   }
+  const shortName = n => n.replace(/(타이거즈|라이온즈|트윈스|베어스|위즈|랜더스|자이언츠|이글스|다이노스|히어로즈)$/, '');
+  function renderNews() {
+    const r = api('GET', '/api/articles');
+    $('newsFeed').innerHTML = r.articles.length ? r.articles.map(a => `<div class="article"><span class="tag">${esc(a.tag)}</span><h3>${esc(a.title)}</h3>${a.sub ? `<div class="sub">${esc(a.sub)}</div>` : ''}<p>${esc(a.body)}</p><div class="meta">${a.year}시즌 ${a.day}일차</div></div>`).join('')
+      : '<p class="muted">아직 기사가 없습니다. 경기를 진행하면 기사가 나옵니다.</p>';
+  }
+  $('goNews').onclick = () => go('news');
   function renderHome() {
     const s = refreshHeader();
     $('champPanel').hidden = !s.done;
@@ -35254,6 +35381,9 @@ function createService(seed) {
     $('newsList').innerHTML = s.news.length ? s.news.map(n => `<div class="newsline">${esc(n)}</div>`).join('') : '경기를 하면 다른 구장 결과가 나옵니다.';
     multiLg = s.league === 'ALL' || s.league === 'WORLD';
     $('miniStand').innerHTML = standRows(s.standings.slice(0, 5));
+    $('newsHome').hidden = !(s.latestNews || []).length;
+    $('newsHomeList').innerHTML = (s.latestNews || []).map(a => `<div class="headline" data-go="news"><b>${esc(a.title)}</b><span>${esc(a.sub || a.body.slice(0, 40))}</span></div>`).join('');
+    $('newsHomeList').querySelectorAll('.headline').forEach(el => { el.onclick = () => go('news'); });
     $('offerHome').hidden = !s.offerCount;
     $('offerHomeText').textContent = `다른 구단에서 트레이드 제안이 ${s.offerCount}건 들어와 있습니다.`;
     $('homeVoices').innerHTML = s.voices.length ? s.voices.map(voiceHtml).join('') : '경기를 하면 선수들이 한마디씩 합니다.';
@@ -35314,7 +35444,7 @@ function createService(seed) {
         `<div class="roster-line">타선 ${names(t.bats.slice(0, 4))}</div>` +
         `<div class="roster-line">투수 ${names(t.pitchers)}</div></div>`;
       const b = document.createElement('button');
-      b.className = 'gold'; b.textContent = '이 팀으로';
+      b.className = 'gold'; b.textContent = '리그 시작하기!';
       b.onclick = () => startWithTeam(t.name);
       card.append(b);
       box.appendChild(card);
@@ -35330,7 +35460,8 @@ function createService(seed) {
       save(); toast(`${name} 감독으로 시작합니다!`); go('home');
     } catch (e) { toast(e.message); }
   }
-  $('pickLeague').onchange = renderPick;
+  $('pickLeague').onchange = () => { document.querySelectorAll('#leagueTiles button').forEach(b => b.classList.toggle('on', b.dataset.lg === $('pickLeague').value)); renderPick(); };
+  document.querySelectorAll('#leagueTiles button').forEach(b => { b.onclick = () => { $('pickLeague').value = b.dataset.lg; $('pickLeague').onchange(); }; });
   $('pickSub').onchange = renderPick;
   $('pickMode').onchange = renderPick;
   $('pickCancel').onclick = () => { document.querySelector('nav.tabs').hidden = false; go('home'); };
@@ -35748,7 +35879,7 @@ function createService(seed) {
   function renderStand() {
     const s = refreshHeader();
     multiLg = s.league === 'ALL' || s.league === 'WORLD';
-    $('standTitle').textContent = `📊 ${s.year} 시즌 순위 (${s.day}/${s.length}일)`;
+    $('standTitle').textContent = `📊 ${s.year} ${s.leagueLabel} 팀 순위 (${s.day}/${s.length}일)`;
     $('fullStand').innerHTML = standRows(s.standings);
   }
   function renderStats() {
