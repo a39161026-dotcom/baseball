@@ -593,3 +593,17 @@ test('수비 위치 배정: 발 빠른 외야수가 중견수, 발 느린 외야
   assert.strictEqual(Object.values(a).filter(x => x === 'DH').length, 1);
   assert.strictEqual(new Set(Object.values(a)).size, 9, '9개 자리가 모두 다름');
 });
+
+test('수비 위치는 내가 정한 대로 (외야 직접 설정)', () => {
+  const svc = createService(94);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18, team: '삼성라이온즈' });
+  const roster = svc.dispatch('GET', '/api/league').payload.roster;
+  const hit = roster.filter(p => p.pos !== 'SP' && p.pos !== 'RP');
+  const lineup = hit.slice(0, 9).map(p => p.id);
+  const positions = {}; ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'].forEach((sl, i) => { positions[lineup[i]] = sl; });
+  positions[lineup[0]] = 'CF'; positions[lineup[6]] = 'C';                 // 일부러 엉뚱하게 (0번=중견수)
+  const g = svc.dispatch('POST', '/api/game', { lineup, positions });
+  const st = g.payload.state;
+  assert.strictEqual(st.lineup.find(p => p.id === lineup[0]).slot, 'CF', '내가 정한 중견수');
+  assert.strictEqual(new Set(st.lineup.map(p => p.slot)).size, 9, '위치가 겹치지 않음');
+});

@@ -430,8 +430,8 @@ function createService(seed) {
   };
   const ls = (t, cols) => [...t.runsByInning, ...Array(cols - t.runsByInning.length).fill(null)];
   // 수비 위치별 선수 이름 (경기 화면 '주루보기'용)
-  function defenseMap(t) {
-    const m = { P: t.pitcher ? t.pitcher.name : '' }, slots = assignPositions(t.lineup.filter(p => !p.isPitcher));
+  function defenseMap(t, override) {
+    const m = { P: t.pitcher ? t.pitcher.name : '' }, slots = resolvePositions(t.lineup.filter(p => !p.isPitcher), override);
     t.lineup.forEach(p => { if (slots[p.id] && slots[p.id] !== 'DH') m[slots[p.id]] = p.name; });
     return m;
   }
@@ -449,11 +449,11 @@ function createService(seed) {
       score: { mine: mine.score, theirs: theirs.score }, hits: { mine: mine.hits, theirs: theirs.hits },
       innings: cols, linescore: { mine: ls(mine, cols), theirs: ls(theirs, cols) },
       pitchTotal: gs.pitchTotal, done: gs.done, difficulty: e.difficulty,
-      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), slot: assignPositions(mine.lineup)[p.id] || p.pos, current: i === curSlot, ab: (e.bat.get(p.id) || {}).ab || 0, h: (e.bat.get(p.id) || {}).h || 0, hr: (e.bat.get(p.id) || {}).hr || 0, rbi: (e.bat.get(p.id) || {}).rbi || 0 })),
+      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), slot: resolvePositions(mine.lineup, g.positions)[p.id] || p.pos, current: i === curSlot, ab: (e.bat.get(p.id) || {}).ab || 0, h: (e.bat.get(p.id) || {}).h || 0, hr: (e.bat.get(p.id) || {}).hr || 0, rbi: (e.bat.get(p.id) || {}).rbi || 0 })),
       cardB: batter ? { ...pdict(batter), season: statLine(batter), today: e.bat.get(batter.id) || {}, side: gs.top ? 'mine' : 'theirs' } : null,
       cardP: gs.defense().pitcher ? { ...pdict(gs.defense().pitcher, gs.defense().currentLine()), season: statLine(gs.defense().pitcher), side: gs.top ? 'theirs' : 'mine' } : null,
       batter: batter ? pdict(batter) : null,
-      plate: e.plate, defense: defenseMap(gs.defense()), upNext: upNext(gs.offense(), 3), batterNo: gs.offense().currentSlot + 1,
+      plate: e.plate, defense: defenseMap(gs.defense(), gs.defense() === mine ? g.positions : null), upNext: upNext(gs.offense(), 3), batterNo: gs.offense().currentSlot + 1,
       myPitcher: mine.pitcher ? pdict(mine.pitcher, mine.currentLine()) : null,
       oppPitcher: theirs.pitcher ? pdict(theirs.pitcher, theirs.currentLine()) : null,
       needsDecision: needs, decisionKind: needs ? (gs.top ? 'offense' : 'defense') : null,
@@ -485,6 +485,7 @@ function createService(seed) {
   // ── 요청 처리 ──
   // 올스타·국가대표 경기도 일반 경기처럼 라인업·선발을 직접 정할 수 있게: 화면용 선수 행 / 선택한 id 로 구성
   const setupRows = ps => ps.map(p => ({ ...p.toDict(), mood: p.morale === undefined ? '' : moodOf(p.morale), stat: (p.isPitcher ? pitRow(p) : batRow(p)) || null, season: statLine(p) }));
+  const cleanPositions = pos => { const o = {}; if (pos && typeof pos === 'object') Object.keys(pos).forEach(id => { if (POS_SLOTS.includes(pos[id])) o[id] = pos[id]; }); return o; };
   function lineupFrom(team, body) {
     let lineup = null;
     if (body.lineup && body.lineup.length === 9) { const l = body.lineup.map(id => team.roster.find(p => p.id === id)); if (l.every(p => p && !p.isPitcher)) lineup = l; }
@@ -519,7 +520,7 @@ function createService(seed) {
         title = `🌏 국가대표 ${intlStageLabel(I)}`;
       }
       games.clear();
-      const g = { id: newId() + newId(), engine, finished: false, kind, title };
+      const g = { id: newId() + newId(), engine, finished: false, kind, title, positions: cleanPositions(body.positions) };
       games.set(g.id, g);
       return [200, { state: stateDict(g), lines: linesOut(engine.drainQueue()) }];
     }
@@ -535,7 +536,7 @@ function createService(seed) {
     const starter = body.starter ? m.roster.find(p => p.id === body.starter && p.isPitcher) : null;
     games.clear();                                   // 하루에 진행 중인 경기는 하나
     const engine = buildGame(m, opp, { lineup, starter, difficulty: S.difficulty });
-    const g = { id: newId() + newId(), engine, finished: false, kind: 'season', title: `${S.day + 1}일차 정규시즌` };
+    const g = { id: newId() + newId(), engine, finished: false, kind: 'season', title: `${S.day + 1}일차 정규시즌`, positions: cleanPositions(body.positions) };
     games.set(g.id, g);
     return [200, { state: stateDict(g), lines: linesOut(engine.drainQueue()) }];
   }

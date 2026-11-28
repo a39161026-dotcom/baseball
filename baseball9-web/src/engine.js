@@ -836,9 +836,22 @@ function assignPositions(lineup) {
   rest.forEach((p, i) => { out[p.id] = 'DH'; });
   return out;
 }
+// 사용자가 정한 수비 위치(override: id → 위치)를 존중하고, 빠진 선수(대타 등)는 남은 자리에 자동 배정
+const POS_SLOTS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
+function resolvePositions(lineup, override) {
+  const out = {}, taken = new Set();
+  if (override) lineup.forEach(p => { const sl = override[p.id]; if (POS_SLOTS.includes(sl) && !taken.has(sl)) { out[p.id] = sl; taken.add(sl); } });
+  const rest = lineup.filter(p => !out[p.id]);
+  if (rest.length) {
+    const auto = assignPositions(rest);
+    rest.forEach(p => { const sl = auto[p.id]; if (sl && !taken.has(sl)) { out[p.id] = sl; taken.add(sl); } });
+    rest.filter(p => !out[p.id]).forEach(p => { const sl = POS_SLOTS.find(x => !taken.has(x)); if (sl) { out[p.id] = sl; taken.add(sl); } });
+  }
+  return out;
+}
 const opponentNames = () => [...KBO_TEAMS, ...NPB_TEAMS, ...MLB_TEAMS];
 
 if (typeof module !== 'undefined') {
   module.exports = { GameEngine, GameState, TeamState, Player, MODE, makeRng, C, DIFFICULTY, PITCH_CALLS, POS_LABEL,
-    buildAllPlayers, playerFromRow, clonePlayer, positionalLineup, assignPositions, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
+    buildAllPlayers, playerFromRow, clonePlayer, positionalLineup, assignPositions, resolvePositions, POS_SLOTS, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
 }

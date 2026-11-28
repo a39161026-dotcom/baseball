@@ -122,6 +122,7 @@
   .lt { width: 100%; font-size: 13px; } .lt th { color: var(--muted); font-weight: 500; padding: 5px 6px; text-align: center; background: #19233a; }
   .lt td { padding: 7px 6px; border-top: 1px solid var(--line); text-align: center; white-space: nowrap; cursor: pointer; }
   .lt td.n { text-align: left; font-weight: 700; } .lt tr:hover td { background: rgba(255,255,255,.05); }
+  .lt select.possel { min-height: 30px; padding: 2px 4px; font-size: 13px; background: #243048; border-color: #3a4a6b; }
   .lt tr.sel td { background: rgba(255,122,26,.25); } .lt tr.st td { color: var(--gold); }
   .lt .ok { color: #43c06b; } .lt .mid { color: #e6b800; } .lt .bad { color: #ff5a4f; }
   .ltd { margin: 0; min-height: 220px; font-size: 13px; } .ltd .hint { color: var(--muted); text-align: center; padding-top: 80px; }
@@ -34006,6 +34007,19 @@ function assignPositions(lineup) {
   rest.forEach((p, i) => { out[p.id] = 'DH'; });
   return out;
 }
+// 사용자가 정한 수비 위치(override: id → 위치)를 존중하고, 빠진 선수(대타 등)는 남은 자리에 자동 배정
+const POS_SLOTS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
+function resolvePositions(lineup, override) {
+  const out = {}, taken = new Set();
+  if (override) lineup.forEach(p => { const sl = override[p.id]; if (POS_SLOTS.includes(sl) && !taken.has(sl)) { out[p.id] = sl; taken.add(sl); } });
+  const rest = lineup.filter(p => !out[p.id]);
+  if (rest.length) {
+    const auto = assignPositions(rest);
+    rest.forEach(p => { const sl = auto[p.id]; if (sl && !taken.has(sl)) { out[p.id] = sl; taken.add(sl); } });
+    rest.filter(p => !out[p.id]).forEach(p => { const sl = POS_SLOTS.find(x => !taken.has(x)); if (sl) { out[p.id] = sl; taken.add(sl); } });
+  }
+  return out;
+}
 const opponentNames = () => [...KBO_TEAMS, ...NPB_TEAMS, ...MLB_TEAMS];
 
 
@@ -34441,8 +34455,8 @@ function createService(seed) {
   };
   const ls = (t, cols) => [...t.runsByInning, ...Array(cols - t.runsByInning.length).fill(null)];
   // 수비 위치별 선수 이름 (경기 화면 '주루보기'용)
-  function defenseMap(t) {
-    const m = { P: t.pitcher ? t.pitcher.name : '' }, slots = assignPositions(t.lineup.filter(p => !p.isPitcher));
+  function defenseMap(t, override) {
+    const m = { P: t.pitcher ? t.pitcher.name : '' }, slots = resolvePositions(t.lineup.filter(p => !p.isPitcher), override);
     t.lineup.forEach(p => { if (slots[p.id] && slots[p.id] !== 'DH') m[slots[p.id]] = p.name; });
     return m;
   }
@@ -34460,11 +34474,11 @@ function createService(seed) {
       score: { mine: mine.score, theirs: theirs.score }, hits: { mine: mine.hits, theirs: theirs.hits },
       innings: cols, linescore: { mine: ls(mine, cols), theirs: ls(theirs, cols) },
       pitchTotal: gs.pitchTotal, done: gs.done, difficulty: e.difficulty,
-      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), slot: assignPositions(mine.lineup)[p.id] || p.pos, current: i === curSlot, ab: (e.bat.get(p.id) || {}).ab || 0, h: (e.bat.get(p.id) || {}).h || 0, hr: (e.bat.get(p.id) || {}).hr || 0, rbi: (e.bat.get(p.id) || {}).rbi || 0 })),
+      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), slot: resolvePositions(mine.lineup, g.positions)[p.id] || p.pos, current: i === curSlot, ab: (e.bat.get(p.id) || {}).ab || 0, h: (e.bat.get(p.id) || {}).h || 0, hr: (e.bat.get(p.id) || {}).hr || 0, rbi: (e.bat.get(p.id) || {}).rbi || 0 })),
       cardB: batter ? { ...pdict(batter), season: statLine(batter), today: e.bat.get(batter.id) || {}, side: gs.top ? 'mine' : 'theirs' } : null,
       cardP: gs.defense().pitcher ? { ...pdict(gs.defense().pitcher, gs.defense().currentLine()), season: statLine(gs.defense().pitcher), side: gs.top ? 'theirs' : 'mine' } : null,
       batter: batter ? pdict(batter) : null,
-      plate: e.plate, defense: defenseMap(gs.defense()), upNext: upNext(gs.offense(), 3), batterNo: gs.offense().currentSlot + 1,
+      plate: e.plate, defense: defenseMap(gs.defense(), gs.defense() === mine ? g.positions : null), upNext: upNext(gs.offense(), 3), batterNo: gs.offense().currentSlot + 1,
       myPitcher: mine.pitcher ? pdict(mine.pitcher, mine.currentLine()) : null,
       oppPitcher: theirs.pitcher ? pdict(theirs.pitcher, theirs.currentLine()) : null,
       needsDecision: needs, decisionKind: needs ? (gs.top ? 'offense' : 'defense') : null,
@@ -34496,6 +34510,7 @@ function createService(seed) {
   // ── 요청 처리 ──
   // 올스타·국가대표 경기도 일반 경기처럼 라인업·선발을 직접 정할 수 있게: 화면용 선수 행 / 선택한 id 로 구성
   const setupRows = ps => ps.map(p => ({ ...p.toDict(), mood: p.morale === undefined ? '' : moodOf(p.morale), stat: (p.isPitcher ? pitRow(p) : batRow(p)) || null, season: statLine(p) }));
+  const cleanPositions = pos => { const o = {}; if (pos && typeof pos === 'object') Object.keys(pos).forEach(id => { if (POS_SLOTS.includes(pos[id])) o[id] = pos[id]; }); return o; };
   function lineupFrom(team, body) {
     let lineup = null;
     if (body.lineup && body.lineup.length === 9) { const l = body.lineup.map(id => team.roster.find(p => p.id === id)); if (l.every(p => p && !p.isPitcher)) lineup = l; }
@@ -34530,7 +34545,7 @@ function createService(seed) {
         title = `🌏 국가대표 ${intlStageLabel(I)}`;
       }
       games.clear();
-      const g = { id: newId() + newId(), engine, finished: false, kind, title };
+      const g = { id: newId() + newId(), engine, finished: false, kind, title, positions: cleanPositions(body.positions) };
       games.set(g.id, g);
       return [200, { state: stateDict(g), lines: linesOut(engine.drainQueue()) }];
     }
@@ -34546,7 +34561,7 @@ function createService(seed) {
     const starter = body.starter ? m.roster.find(p => p.id === body.starter && p.isPitcher) : null;
     games.clear();                                   // 하루에 진행 중인 경기는 하나
     const engine = buildGame(m, opp, { lineup, starter, difficulty: S.difficulty });
-    const g = { id: newId() + newId(), engine, finished: false, kind: 'season', title: `${S.day + 1}일차 정규시즌` };
+    const g = { id: newId() + newId(), engine, finished: false, kind: 'season', title: `${S.day + 1}일차 정규시즌`, positions: cleanPositions(body.positions) };
     games.set(g.id, g);
     return [200, { state: stateDict(g), lines: linesOut(engine.drainQueue()) }];
   }
@@ -35569,10 +35584,10 @@ function createService(seed) {
 
   // ── 경기 준비 ──
   const POS_KO = { C: '포수', '1B': '1루수', '2B': '2루수', '3B': '3루수', SS: '유격수', LF: '좌익수', CF: '중견수', RF: '우익수', DH: '지명타자' };
-  let selPlayer = null, starterId = null, setupKind = 'season';
+  let selPlayer = null, starterId = null, setupKind = 'season', manualPos = {};
   function openSetup(kind) {                 // 올스타·국가대표 경기도 라인업 관리 화면을 거침
     try { api('POST', '/api/setup', { kind }); } catch (e) { toast(e.message); return; }
-    setupKind = kind; manualLineup = null; starterId = null; selPlayer = null;
+    setupKind = kind; manualLineup = null; manualPos = {}; starterId = null; selPlayer = null;
     currentTab = 'play';
     document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === 'play' ? 'page' : 'false'));
     renderSetup(); show('setup'); window.scrollTo(0, 0);
@@ -35592,12 +35607,13 @@ function createService(seed) {
     const byId = id => league.roster.find(p => p.id === id);
     const hitters = league.roster.filter(p => p.pos !== 'SP' && p.pos !== 'RP');
     const pitchers = league.roster.filter(p => p.pos === 'SP' || p.pos === 'RP');
-    if (!manualLineup || manualLineup.some(id => !hitters.find(p => p.id === id))) manualLineup = positionalLineup(hitters).map(p => p.id);
+    if (!manualLineup || manualLineup.some(id => !hitters.find(p => p.id === id))) { manualLineup = positionalLineup(hitters).map(p => p.id); manualPos = {}; }
     if (!starterId || !pitchers.find(p => p.id === starterId)) starterId = ([...pitchers].sort((a, b) => (a.pos === 'SP' ? 0 : 1) - (b.pos === 'SP' ? 0 : 1) || a.fatigue - b.fatigue)[0] || {}).id;
     const avg = p => p.stat && p.stat.ab ? p.stat.avg.toFixed(3).replace(/^0/, '') : '-';
-    const slots = assignPositions(manualLineup.map(byId));
-    const hRow = (p, i) => `<tr data-id="${esc(p.id)}" class="${selPlayer === p.id ? 'sel' : ''}"><td>${i === null ? '' : i + 1}</td><td class="n">${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''}</td><td>${i === null ? esc(p.pos) : (POS_KO[slots[p.id]] || esc(p.pos))}</td><td>${p.effOvr}</td><td>${fatIcon(p.fatigue)} ${p.fatigue}%</td><td>${avg(p)}</td><td>${p.stat ? p.stat.hr : 0}</td><td>${p.stat ? p.stat.rbi : 0}</td><td>${p.stat ? p.stat.sb : 0}</td></tr>`;
-    const hHead = '<tr><th>타순</th><th>이름</th><th>수비</th><th>OVR</th><th>상태</th><th>타율</th><th>홈런</th><th>타점</th><th>도루</th></tr>';
+    manualPos = resolvePositions(manualLineup.map(byId), manualPos);        // 내가 정한 수비 위치 유지, 빠진 선수는 자동 배정
+    const slots = manualPos;
+    const hRow = (p, i) => `<tr data-id="${esc(p.id)}" class="${selPlayer === p.id ? 'sel' : ''}"><td>${i === null ? '' : i + 1}</td><td class="n">${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''}</td><td>${i === null ? esc(p.pos) : `<select class="possel" data-id="${esc(p.id)}" aria-label="${esc(p.name)} 수비 위치">${POS_SLOTS.map(sl => `<option value="${sl}"${slots[p.id] === sl ? ' selected' : ''}>${POS_KO[sl]}</option>`).join('')}</select>`}</td><td>${p.effOvr}</td><td>${fatIcon(p.fatigue)} ${p.fatigue}%</td><td>${avg(p)}</td><td>${p.stat ? p.stat.hr : 0}</td><td>${p.stat ? p.stat.rbi : 0}</td><td>${p.stat ? p.stat.sb : 0}</td></tr>`;
+    const hHead = '<tr><th>타순</th><th>이름</th><th>수비 위치</th><th>OVR</th><th>상태</th><th>타율</th><th>홈런</th><th>타점</th><th>도루</th></tr>';
     $('ltLineup').innerHTML = hHead + manualLineup.map((id, i) => hRow(byId(id), i)).join('');
     const inLineup = new Set(manualLineup), bench = hitters.filter(p => !inLineup.has(p.id));
     $('ltBench').innerHTML = hHead.replace('<th>타순</th>', '<th></th>') + (bench.length ? bench.map(p => hRow(p, null)).join('') : '<tr><td colspan="9" class="muted">벤치 없음</td></tr>');
@@ -35608,7 +35624,7 @@ function createService(seed) {
     const have = pos => manualLineup.filter(id => byId(id).pos === pos).length;
     const lack = Object.keys(want).filter(pos => have(pos) < want[pos]).map(pos => have(pos) === 0 ? `${labels[pos]} 없음` : `${labels[pos]} ${have(pos)}/${want[pos]}명`);
     const extra = Object.keys(want).reduce((a, pos) => a + Math.max(0, have(pos) - want[pos]), 0);
-    $('lineupWarn').textContent = lack.length || extra > 1 ? `⚠ 포지션 불균형: ${lack.join(' · ') || '같은 포지션 중복'} — 선수를 눌러 교체하거나 "포지션 맞춰 자동 구성"을 누르세요.` : '✔ 포지션이 맞습니다 (포수·내야 4·외야 3 + 지명타자).';
+    $('lineupWarn').textContent = lack.length || extra > 1 ? `⚠ 포지션 불균형: ${lack.join(' · ') || '같은 포지션 중복'} — 선수를 눌러 교체하거나 "포지션 맞춰 자동 구성"을 누르세요. (수비 위치는 표에서 직접 바꿀 수 있습니다)` : '✔ 포지션이 맞습니다 (포수·내야 4·외야 3 + 지명타자).';
     // 클릭: 선택 → 다른 선수 클릭 시 교체
     const handle = tr => {
       const id = tr.dataset.id, a = selPlayer;
@@ -35616,12 +35632,23 @@ function createService(seed) {
       if (a && a !== id && isH(a) && isH(id)) {
         const ia = manualLineup.indexOf(a), ib = manualLineup.indexOf(id);
         if (ia >= 0 && ib >= 0) [manualLineup[ia], manualLineup[ib]] = [manualLineup[ib], manualLineup[ia]];
-        else if (ia >= 0) manualLineup[ia] = id; else if (ib >= 0) manualLineup[ib] = a;
+        else if (ia >= 0) { manualPos[id] = manualPos[a]; delete manualPos[a]; manualLineup[ia] = id; }
+        else if (ib >= 0) { manualPos[a] = manualPos[id]; delete manualPos[id]; manualLineup[ib] = a; }
         selPlayer = id;
       } else selPlayer = a === id ? null : id;
       renderSetup();
     };
     ['ltLineup', 'ltBench', 'ltPit'].forEach(t => $(t).querySelectorAll('tr[data-id]').forEach(tr => { tr.onclick = () => handle(tr); }));
+    $('ltLineup').querySelectorAll('select.possel').forEach(sel => {         // 수비 위치 직접 지정: 이미 그 자리에 있는 선수와 서로 바꿈
+      sel.onclick = e => e.stopPropagation();
+      sel.onchange = () => {
+        const id = sel.dataset.id, to = sel.value, from = manualPos[id];
+        const other = Object.keys(manualPos).find(k => k !== id && manualPos[k] === to && manualLineup.includes(k));
+        if (other) manualPos[other] = from;
+        manualPos[id] = to;
+        renderSetup();
+      };
+    });
     // 우측 선수 상세
     const p = selPlayer && byId(selPlayer);
     if (!p) { $('ltDetail').innerHTML = '<div class="hint">좌측 리스트에서<br>선수를 클릭해 주십시오.</div>'; }
@@ -35637,7 +35664,7 @@ function createService(seed) {
         rel.onclick = () => {
           if (!rel.dataset.armed) { rel.dataset.armed = '1'; rel.textContent = '정말 방출할까요? 한 번 더 누르세요'; rel.className = 'sm stop'; setTimeout(() => { if (rel.isConnected) { delete rel.dataset.armed; rel.textContent = '🗑 방출'; rel.className = 'sm'; } }, 3500); return; }
           touched = true;
-          try { const r = api('POST', '/api/release', { id: p.id }); toast(`${r.released} 선수를 방출했습니다`); save(); selPlayer = null; manualLineup = null; } catch (e) { toast(e.message); }
+          try { const r = api('POST', '/api/release', { id: p.id }); toast(`${r.released} 선수를 방출했습니다`); save(); selPlayer = null; manualLineup = null; manualPos = {}; } catch (e) { toast(e.message); }
           renderSetup();
         };
         $('ltDetail').appendChild(rel);
@@ -35645,7 +35672,7 @@ function createService(seed) {
     }
   }
   function mkBtn(text, fn) { const b = document.createElement('button'); b.className = 'sm'; b.textContent = text; b.onclick = fn; return b; }
-  $('btnAutoLineup').onclick = () => { manualLineup = null; selPlayer = null; renderSetup(); };
+  $('btnAutoLineup').onclick = () => { manualLineup = null; manualPos = {}; selPlayer = null; renderSetup(); };
 
   function startGame(body) {
     try {
@@ -35662,7 +35689,7 @@ function createService(seed) {
       window.scrollTo(0, 0);
     } catch (e) { toast(e.message); }
   }
-  $('btnStart').onclick = () => startGame({ kind: setupKind === 'season' ? undefined : setupKind, starter: starterId, lineup: manualLineup });
+  $('btnStart').onclick = () => startGame({ kind: setupKind === 'season' ? undefined : setupKind, starter: starterId, lineup: manualLineup, positions: manualPos });
   $('starPlay').onclick = () => openSetup('allstar');
   $('starAuto').onclick = () => {
     touched = true;
