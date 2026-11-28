@@ -396,6 +396,8 @@
           <div class="scroll-x"><table class="lt" id="ltBench"></table></div>
           <div class="tt" style="margin-top:14px">투수진 <span class="muted">— 선발 투수를 눌러 지정</span></div>
           <div class="scroll-x"><table class="lt" id="ltPit"></table></div>
+          <div class="tt" style="margin-top:14px">2군 <span class="muted">— 성장해서 1군 선수보다 좋아지면 자동으로 콜업됩니다</span></div>
+          <div class="scroll-x"><table class="lt" id="ltFarm"></table></div>
         </div>
         <div class="panel ltd" id="ltDetail"></div>
       </div>
@@ -583,6 +585,11 @@
       </div>
       <div class="row" style="margin-top:10px"><button class="gold" id="tradeGo">트레이드 제안</button></div>
       <details style="margin-top:10px"><summary class="lbl">트레이드 기록</summary><div id="tradeHist" class="side"></div></details>
+    </div>
+    <div class="panel" id="retiredPanel">
+      <p class="title">🎓 은퇴 선수 (명예의 전당)</p>
+      <p class="muted" style="margin:0 0 8px">40세가 되면 바로 은퇴하고, 35세부터는 나이와 능력치에 따라 은퇴합니다. 은퇴하면 기사가 나옵니다.</p>
+      <div id="retiredList" class="side"></div>
     </div>
     <div class="panel" id="lockerPanel">
       <p class="title">🗣 라커룸</p>
@@ -879,8 +886,9 @@
       $('setupTitle').textContent = `${v.title} · ${v.teamName} vs ${v.opponent} — 라인업 관리`;
     }
     const byId = id => league.roster.find(p => p.id === id);
-    const hitters = league.roster.filter(p => p.pos !== 'SP' && p.pos !== 'RP');
-    const pitchers = league.roster.filter(p => p.pos === 'SP' || p.pos === 'RP');
+    const hitters = league.roster.filter(p => p.pos !== 'SP' && p.pos !== 'RP' && !p.farm);
+    const pitchers = league.roster.filter(p => (p.pos === 'SP' || p.pos === 'RP') && !p.farm);
+    const farmers = league.roster.filter(p => p.farm);
     if (!manualLineup || manualLineup.some(id => !hitters.find(p => p.id === id))) { manualLineup = positionalLineup(hitters).map(p => p.id); manualPos = {}; }
     if (!starterId || !pitchers.find(p => p.id === starterId)) starterId = ([...pitchers].sort((a, b) => (a.pos === 'SP' ? 0 : 1) - (b.pos === 'SP' ? 0 : 1) || a.fatigue - b.fatigue)[0] || {}).id;
     const avg = p => p.stat && p.stat.ab ? p.stat.avg.toFixed(3).replace(/^0/, '') : '-';
@@ -893,6 +901,8 @@
     $('ltBench').innerHTML = hHead.replace('<th>타순</th>', '<th></th>') + (bench.length ? bench.map(p => hRow(p, null)).join('') : '<tr><td colspan="9" class="muted">벤치 없음</td></tr>');
     $('ltPit').innerHTML = '<tr><th>역할</th><th>이름</th><th>OVR</th><th>상태</th><th>평균자책</th><th>승-패</th><th>삼진</th></tr>' + [...pitchers].sort((a, b) => (a.pos === 'SP' ? 0 : 1) - (b.pos === 'SP' ? 0 : 1) || b.effOvr - a.effOvr).map(p =>
       `<tr data-id="${esc(p.id)}" class="${selPlayer === p.id ? 'sel' : ''} ${starterId === p.id ? 'st' : ''}"><td>${starterId === p.id ? '선발 ★' : esc(p.pos)}</td><td class="n">${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''}</td><td>${p.effOvr}</td><td>${fatIcon(p.fatigue)} ${p.fatigue}%</td><td>${p.stat && p.stat.era !== null && p.stat.era !== undefined ? p.stat.era.toFixed(2) : '-'}</td><td>${p.stat ? p.stat.w + '-' + p.stat.l : '-'}</td><td>${p.stat ? p.stat.k : 0}</td></tr>`).join('');
+    $('ltFarm').innerHTML = '<tr><th>이름</th><th>위치</th><th>나이</th><th>OVR</th><th>잠재력</th><th>상태</th></tr>' + (farmers.length ? [...farmers].sort((a, b) => b.effOvr - a.effOvr).map(p =>
+      `<tr data-id="${esc(p.id)}" class="${selPlayer === p.id ? 'sel' : ''}"><td class="n">${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''}</td><td>${esc(p.pos)}</td><td>${p.age}</td><td>${p.effOvr}</td><td>${p.potential}</td><td>${fatIcon(p.fatigue)} ${p.fatigue}%</td></tr>`).join('') : '<tr><td colspan="6" class="muted">2군 선수가 없습니다 (드래프트 신인과 영입 선수가 2군에 들어옵니다)</td></tr>');
     // 포지션 균형 안내
     const labels = { C: '포수', '1B': '1루수', '2B': '2루수', '3B': '3루수', SS: '유격수', OF: '외야수' }, want = { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3 };
     const have = pos => manualLineup.filter(id => byId(id).pos === pos).length;
@@ -912,7 +922,7 @@
       } else selPlayer = a === id ? null : id;
       renderSetup();
     };
-    ['ltLineup', 'ltBench', 'ltPit'].forEach(t => $(t).querySelectorAll('tr[data-id]').forEach(tr => { tr.onclick = () => handle(tr); }));
+    ['ltLineup', 'ltBench', 'ltPit', 'ltFarm'].forEach(t => $(t).querySelectorAll('tr[data-id]').forEach(tr => { tr.onclick = () => handle(tr); }));
     $('ltLineup').querySelectorAll('select.possel').forEach(sel => {         // 수비 위치 직접 지정: 이미 그 자리에 있는 선수와 서로 바꿈
       sel.onclick = e => e.stopPropagation();
       sel.onchange = () => {
@@ -932,7 +942,20 @@
         `<div class="kv" style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin-top:12px"><span class="muted">잠재력</span><b style="text-align:right">${p.potential}</b><span class="muted">시즌</span><b style="text-align:right;font-weight:600">${esc(p.season || '기록 없음')}</b><span class="muted">피로</span><b style="text-align:right">${p.fatigue}%</b><span class="muted">사기</span><b style="text-align:right">${esc(p.mood || '')} ${p.morale ?? ''}</b></div>` + skillHtml(p.pos, p.sub) +
         (isP ? `<button class="gold" style="width:100%;margin-top:12px" id="btnMakeStarter" ${starterId === p.id ? 'disabled' : ''}>${starterId === p.id ? '현재 선발' : '선발 투수로 지정'}</button>` : '');
       const mk = $('btnMakeStarter'); if (mk) mk.onclick = () => { starterId = p.id; renderSetup(); };
-      if (setupKind === 'season') {                // 방출 (한 번 더 눌러 확정)
+      if (setupKind === 'season') {                // 1군/2군 이동, 은퇴, 방출 (은퇴·방출은 한 번 더 눌러 확정)
+        const mv = document.createElement('button');
+        mv.className = 'sm'; mv.style.cssText = 'width:100%;margin-top:8px'; mv.textContent = p.farm ? '⬆ 1군 콜업' : '⬇ 2군으로 내리기';
+        mv.onclick = () => { touched = true; try { api('POST', '/api/farm', { id: p.id, up: !!p.farm }); save(); toast(`${p.name} ${p.farm ? '1군 콜업' : '2군행'}`); manualLineup = null; manualPos = {}; selPlayer = null; } catch (e) { toast(e.message); } renderSetup(); };
+        $('ltDetail').appendChild(mv);
+        const ret = document.createElement('button');
+        ret.className = 'sm'; ret.style.cssText = 'width:100%;margin-top:8px'; ret.textContent = '🎓 은퇴 시키기';
+        ret.onclick = () => {
+          if (!ret.dataset.armed) { ret.dataset.armed = '1'; ret.textContent = '정말 은퇴시킬까요? 한 번 더 누르세요'; ret.className = 'sm stop'; setTimeout(() => { if (ret.isConnected) { delete ret.dataset.armed; ret.textContent = '🎓 은퇴 시키기'; ret.className = 'sm'; } }, 3500); return; }
+          touched = true;
+          try { const r = api('POST', '/api/retire', { id: p.id }); toast(`${r.retired} 선수가 은퇴했습니다`); save(); selPlayer = null; manualLineup = null; manualPos = {}; } catch (e) { toast(e.message); }
+          renderSetup();
+        };
+        $('ltDetail').appendChild(ret);
         const rel = document.createElement('button');
         rel.className = 'sm'; rel.style.cssText = 'width:100%;margin-top:8px'; rel.textContent = '🗑 방출';
         rel.onclick = () => {
@@ -1478,7 +1501,11 @@
 
   // ── 구단 운영: 드래프트 · 트레이드 · 라커룸 ──
   const pick = { give: new Set(), get: new Set() };
-  function renderOffice() { renderOffers(); renderDraft(); renderTrade(); renderLocker(); }
+  function renderRetired() {
+    const r = api('GET', '/api/retired');
+    $('retiredList').innerHTML = r.retired.length ? '<ul style="padding-left:18px">' + r.retired.map(x => `<li><b>${esc(x.name)}</b> <span class="muted">${esc(x.pos)} · ${x.age}세 · ${esc(x.team)} · ${x.year}시즌 은퇴${x.years ? ' · ' + x.years + '시즌' : ''}${x.user ? ' · 우리 팀' : ''}</span></li>`).join('') + '</ul>' : '<span class="muted">아직 은퇴한 선수가 없습니다.</span>';
+  }
+  function renderOffice() { renderOffers(); renderDraft(); renderTrade(); renderLocker(); renderRetired(); }
   function renderOffers() {
     const { offers } = api('GET', '/api/trade/offers');
     $('offerPanel').hidden = !offers.length;

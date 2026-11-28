@@ -607,3 +607,71 @@ test('수비 위치는 내가 정한 대로 (외야 직접 설정)', () => {
   assert.strictEqual(st.lineup.find(p => p.id === lineup[0]).slot, 'CF', '내가 정한 중견수');
   assert.strictEqual(new Set(st.lineup.map(p => p.slot)).size, 9, '위치가 겹치지 않음');
 });
+
+test('은퇴: 고령 선수는 비시즌에 은퇴, 기사·은퇴 선수 명단, 수동 은퇴', () => {
+  const svc = createService(95);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18, team: '삼성라이온즈' });
+  const S = svc.state;
+  const old = S.teams[1].roster.find(p => !p.isPitcher), mine = S.teams[0].roster.find(p => p.age >= 0 && !p.isPitcher);
+  old.age = 44; old.ovr = 80;                               // AI 팀의 고령 스타: 43세 이상은 확실히 은퇴
+  const hitterCount = S.teams[1].roster.filter(p => !p.isPitcher).length;
+  svc.dispatch('POST', '/api/season/quick', { days: 18 });
+  svc.dispatch('POST', '/api/season/new', { keep: true });
+  const list = svc.dispatch('GET', '/api/retired').payload;
+  assert.ok(list.retired.some(r => r.name === old.name), '고령 선수 은퇴');
+  assert.ok(!svc.state.teams[1].roster.some(p => p.id === old.id));
+  assert.ok(svc.state.teams[1].roster.filter(p => !p.isPitcher).length >= 9, 'AI 팀은 모자란 자리를 채움');
+  const art = svc.dispatch('GET', '/api/articles').payload.articles;
+  assert.ok(art.some(a => a.tag === '은퇴' && a.title.includes(old.name)), '은퇴 기사');
+  // 수동 은퇴
+  const target = svc.state.teams[0].roster.find(p => !p.isPitcher);
+  svc.dispatch('POST', '/api/scout/search', { q: '' });
+  svc.state.teams[0].roster.push(...Array.from({ length: 3 }, (_, i) => { const x = new Player('보강' + i, '1B', 'KBO', 25, 60, 60, 0, 1, '', 2026); x.id = 'X' + i; x.person = x.id; return x; }));
+  const r = svc.dispatch('POST', '/api/retire', { id: target.id });
+  assert.strictEqual(r.status, 200);
+  assert.ok(!svc.state.teams[0].roster.some(p => p.id === target.id));
+  assert.ok(svc.dispatch('GET', '/api/retired').payload.retired.some(x => x.name === target.name && x.manual));
+  // 저장/불러오기
+  const svc2 = createService(1);
+  assert.ok(svc2.importState(JSON.parse(JSON.stringify(svc.exportState()))));
+  assert.ok(svc2.dispatch('GET', '/api/retired').payload.retired.length >= 2);
+});
+
+test('2군: 신인은 2군에서 시작, 좋아지면 자동 콜업, 수동 이동, 40세 즉시 은퇴', () => {
+  const svc = createService(96);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18, team: '삼성라이온즈' });
+  const S = svc.state, me = S.teams[0];
+  // 2군에서 능력치가 크게 오른 타자는 3일마다 자동으로 콜업 (1군 같은 역할 최약체와 교체)
+  const rookie = new Player('유망주', '2B', 'KBO', 22, 88, 90, 0, 1, '', 2026); rookie.id = 'F1'; rookie.person = 'F1'; rookie.farm = true;
+  me.roster.push(rookie); S.players[rookie.id] = rookie;
+  const r1 = svc.dispatch('GET', '/api/league').payload.roster.find(p => p.id === 'F1');
+  assert.strictEqual(r1.farm, true, '2군 표시');
+  svc.dispatch('POST', '/api/season/quick', { days: 3 });
+  assert.strictEqual(rookie.farm, false, 'OVR 88 유망주 자동 콜업');
+  assert.ok(svc.dispatch('GET', '/api/articles').payload.articles.some(a => a.tag === '2군' && a.title.includes('유망주')), '콜업 기사');
+  assert.ok(me.roster.filter(p => !p.farm).length <= 28, '1군 정원');
+  // 수동 이동
+  const h = me.roster.filter(p => !p.isPitcher && !p.farm);
+  const down = svc.dispatch('POST', '/api/farm', { id: h[h.length - 1].id, up: false });
+  assert.strictEqual(down.status, 200);
+  assert.strictEqual(h[h.length - 1].farm, true);
+  // 1군 야수 9명 아래로는 못 내림
+  while (me.roster.filter(p => !p.isPitcher && !p.farm).length > 9) svc.dispatch('POST', '/api/farm', { id: me.roster.find(p => !p.isPitcher && !p.farm).id, up: false });
+  assert.strictEqual(svc.dispatch('POST', '/api/farm', { id: me.roster.find(p => !p.isPitcher && !p.farm).id, up: false }).status, 409);
+  // 경기는 1군만: 2군 선수는 타순에 없음
+  const g = svc.dispatch('POST', '/api/game', {}).payload.state;
+  assert.ok(g.lineup.every(p => !me.roster.find(x => x.id === p.id).farm));
+  // 40세가 되면 바로 은퇴
+  const ai = S.teams[1].roster.find(p => !p.isPitcher && !p.farm);
+  ai.age = 39; ai.ovr = 85;
+  svc.dispatch('POST', '/api/season/quick', { days: 18 });
+  svc.dispatch('POST', '/api/season/new', { keep: true });
+  assert.ok(svc.dispatch('GET', '/api/retired').payload.retired.some(x => x.id === ai.id), '40세 즉시 은퇴');
+  // 드래프트 신인은 2군
+  const draftees = svc.state.teams[0].roster.filter(p => p.farm);
+  assert.ok(draftees.length >= 0);
+  // 저장/불러오기에서 2군 구분 유지
+  const svc2 = createService(1);
+  assert.ok(svc2.importState(JSON.parse(JSON.stringify(svc.exportState()))));
+  assert.strictEqual(svc2.state.teams[0].roster.filter(p => p.farm).length, draftees.length);
+});

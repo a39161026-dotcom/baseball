@@ -50,7 +50,7 @@ class Player {
       fatigue: this.fatigue, hp: this.hp, condition: this.condition[0], team: this.team, league: this.league,
       first: this.first || null, last: this.last || null, country: this.country || '',
       age: this.age, potential: this.potential, morale: this.morale === undefined ? null : this.morale, rookie: !!this.rookie,
-      sub: this.sub || null };
+      sub: this.sub || null, farm: !!this.farm };
   }
 }
 
