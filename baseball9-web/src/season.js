@@ -620,21 +620,22 @@ function createService(seed) {
 
   // ── 올스타전 ──
   const allStarDue = () => !!S.allStar && !S.allStar.done && S.allStar.day >= 0 && S.day >= S.allStar.day && !S.done;
-  // 이번 시즌(내가 진행한 경기) 성적 보너스: 잘한 선수일수록 올스타·국가대표에 잘 뽑힘. 표본이 적으면 반영을 줄임
-  function perfBonus(p) {
+  // 올스타·국가대표 선발 기준 = 내가 진행한 이번 시즌 기록. 기록이 충분한 선수는 기록 순으로 뽑고(능력치는 보지 않음),
+  // 기록이 모자란 선수(출전·등판이 거의 없거나 다른 리그 선수)는 그 뒤에서 능력치 순으로만 고려
+  function perfScore(p) {
     const st = S.stats[p.id] || {};
-    if (p.isPitcher && st.pit && st.pit.outs >= 6) {
-      const w = Math.min(1, st.pit.outs / Math.max(15, S.day * 3)), era = st.pit.r * 27 / st.pit.outs;
-      return w * clamp((4.2 - era) * 3.5, -14, 18);
+    if (p.isPitcher) {
+      const t = st.pit;
+      if (!t || t.outs < Math.max(9, S.day * 1.5)) return null;
+      const ip = t.outs / 3, era = (t.r * 9 + 4.5 * 6) / (ip + 6);          // 표본이 적으면 평균 평균자책(4.5)쪽으로 보정
+      return (5 - era) * 20 + t.k * 0.3 + t.w * 2;
     }
-    if (!p.isPitcher && st.bat && st.bat.pa >= 10) {
-      const b = st.bat, w = Math.min(1, b.pa / Math.max(20, S.day * 2));
-      const ops = (b.h + b.bb) / b.pa + (b.h + b.d2 + 2 * b.d3 + 3 * b.hr) / Math.max(1, b.ab);
-      return w * clamp((ops - 0.72) * 45, -14, 20);
-    }
-    return 0;
+    const b = st.bat;
+    if (!b || b.pa < Math.max(10, S.day * 1.5)) return null;
+    const ops = (b.h + b.bb) / b.pa + (b.h + b.d2 + 2 * b.d3 + 3 * b.hr) / Math.max(1, b.ab);
+    return ((ops * b.pa + 0.72 * 20) / (b.pa + 20)) * 100 + b.hr * 0.8 + b.rbi * 0.3 + b.sb * 0.3;
   }
-  const fanScore = p => p.ovr + perfBonus(p);
+  const fanScore = p => { const v = perfScore(p); return v === null ? p.ovr : 1000 + v; };       // 기록이 있는 선수가 항상 먼저
   // 선발 이유로 보여 줄 이번 시즌 성적 한 줄
   function statLine(p) {
     const st = S.stats[p.id] || {};
@@ -648,7 +649,7 @@ function createService(seed) {
     }
     return '';
   }
-  const squadRows = ps => ps.map(p => ({ name: p.name, pos: p.pos, ovr: p.ovr, league: p.league, team: p.team, score: Math.round(fanScore(p) * 10) / 10, stat: statLine(p) }));
+  const squadRows = ps => ps.map(p => ({ name: p.name, pos: p.pos, ovr: p.ovr, league: p.league, team: p.team, score: perfScore(p) === null ? null : Math.round(perfScore(p) * 10) / 10, stat: statLine(p) }));
   function allStarSquads() {
     const myG = myTeam().group;
     const other = S.teams.map(t => t.group).find(g => g !== myG) || myG;
@@ -681,7 +682,7 @@ function createService(seed) {
   function buildNation(code, era) {
     const inEra = p => era === 'legend' ? true : S.mode === 'year' ? p.first <= S.year && p.last >= S.year : p.last >= LEAGUES[p.league].last - 2;     // 연도 선택 모드: 그 해 현역
     const cands = DB.filter(p => p.country === code && inEra(p));
-    const score = era === 'legend' ? (p => p.ovr) : fanScore;          // 현역 대표는 이번 시즌 성적도 반영해 잘한 선수가 뽑힘 (역대 드림팀은 능력치만)
+    const score = era === 'legend' ? (p => p.ovr) : fanScore;          // 현역 대표: 이번 시즌 기록 순 (기록이 없는 선수는 능력치로 뒤에서 채움). 역대 드림팀은 통산 능력치
     const best = new Map();                 // 동일인은 가장 높은 점수 한 명
     cands.forEach(p => { const k = pk(p); if (!best.has(k) || score(best.get(k)) < score(p)) best.set(k, p); });
     return pickRoster([...best.values()], new Set(), score).map(p => p.id);
@@ -756,7 +757,7 @@ function createService(seed) {
     if (!I) return { active: false, countries: [...INTL_GROUPS.A, ...INTL_GROUPS.B].map(c => ({ code: c, name: COUNTRY_NAME[c] })) };
     const opp = I.stage === 'done' ? null : intlUserMatch();
     const roster = I.teams[I.mine].ids.map(id => DB_BY_ID.get(id)).filter(Boolean)
-      .map(p => ({ name: p.name, pos: p.pos, ovr: p.ovr, league: p.league, team: p.team, stat: statLine(p), score: Math.round((I.era === 'legend' ? p.ovr : fanScore(p)) * 10) / 10 }));
+      .map(p => ({ name: p.name, pos: p.pos, ovr: p.ovr, league: p.league, team: p.team, stat: statLine(p), score: I.era === 'legend' || perfScore(p) === null ? null : Math.round(perfScore(p) * 10) / 10 }));
     return {
       active: true, era: I.era, mine: I.mine, mineName: COUNTRY_NAME[I.mine], stage: I.stage, stageLabel: intlStageLabel(I),
       groups: { A: intlGroupTable('A'), B: intlGroupTable('B') },

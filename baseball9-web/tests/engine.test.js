@@ -534,6 +534,22 @@ test('드래프트 10라운드 + 연도별 선수("09 양현종")', () => {
   const keys = new Set(); svc.state.teams.forEach(t => t.roster.forEach(p => { assert.ok(!keys.has(p.person || p.id)); keys.add(p.person || p.id); }));
 });
 
+test('올스타: 능력치가 아니라 이번 시즌 기록 순으로 뽑힘 (능력치 높은 부진 선수보다 기록 좋은 선수)', () => {
+  const svc = createService(89);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18, team: '삼성라이온즈' });
+  svc.dispatch('POST', '/api/season/quick', { days: 9 });
+  const S = svc.state, grp = S.teams[0].group;
+  const of = S.teams.filter(t => t.group === grp).flatMap(t => t.roster.filter(p => !p.farm)).filter(p => p.pos === 'OF').sort((a, b) => b.ovr - a.ovr);
+  const star = of[0], weak = of[of.length - 1];
+  // 모든 외야수에게 평범한 기록을 주고, 최고 능력치 선수는 부진, 최저 능력치 선수는 폭발
+  of.forEach(p => { S.stats[p.id] = { bat: { g: 9, pa: 40, ab: 36, h: 10, d2: 2, d3: 0, hr: 1, rbi: 5, bb: 3, k: 8, r: 4, sb: 0, cs: 0 } }; });
+  S.stats[star.id] = { bat: { g: 9, pa: 40, ab: 36, h: 4, d2: 0, d3: 0, hr: 0, rbi: 1, bb: 3, k: 12, r: 1, sb: 0, cs: 0 } };
+  S.stats[weak.id] = { bat: { g: 9, pa: 40, ab: 34, h: 18, d2: 5, d3: 0, hr: 8, rbi: 22, bb: 6, k: 4, r: 14, sb: 1, cs: 0 } };
+  const q = svc.dispatch('GET', '/api/allstar/squads').payload, names = new Set([...q.mine.roster, ...q.theirs.roster].map(p => p.name));
+  assert.ok(names.has(weak.name), '기록이 좋은 선수는 능력치가 낮아도 뽑힘');
+  assert.ok(!names.has(star.name), '능력치가 높아도 기록이 나쁘면 못 뽑힘');
+});
+
 test('올스타·국가대표: 이번 시즌 잘한 선수가 뽑힘', () => {
   const svc = createService(88);
   svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18, team: '삼성라이온즈' });
