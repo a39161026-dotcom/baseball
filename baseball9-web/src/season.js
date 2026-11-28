@@ -913,7 +913,7 @@ function createService(seed) {
         if ((perPerson.get(key) || 0) >= 2 || ownedIds.has(`${id}@${y}`)) return false;      // 한 사람의 연도 버전은 풀에 최대 2개
         perPerson.set(key, (perPerson.get(key) || 0) + 1);
         const v = seasonVersion(base, y, o, SEASON_TEAMS[t]);
-        rows.push([v.id, v.name, v.pos, lg, v.age, v.ovr, v.potential, `${y}년 ${SEASON_TEAMS[t]}`, id, y, SEASON_TEAMS[t]]);
+        rows.push([v.id, v.name, v.pos, lg, v.age, v.ovr, v.potential, `${y}년 ${SEASON_TEAMS[t]}`, id, y, SEASON_TEAMS[t], base.en || '']);
         return true;
       });
     });
@@ -924,7 +924,7 @@ function createService(seed) {
         if (seenBase.has(pk(p))) return false;              // 리그를 오간 같은 사람은 한 번만
         seenBase.add(pk(p));
         const active = p.last >= LEAGUES[lg].last - 1 && p.birthYear;
-        rows.push([p.id, p.name, p.pos, lg, active ? S.year - p.birthYear : p.age, p.ovr, p.potential, `${p.first}~${p.last} ${p.team || ''}`.trim(), p.id, 0, '']);
+        rows.push([p.id, p.name, p.pos, lg, active ? S.year - p.birthYear : p.age, p.ovr, p.potential, `${p.first}~${p.last} ${p.team || ''}`.trim(), p.id, 0, '', p.en || '']);
         return true;
       });
     });
@@ -940,7 +940,7 @@ function createService(seed) {
       open: true, done: D.pick >= total, round: Math.floor(D.pick / D.order.length) + 1, rounds: D.rounds,
       pickNo: D.pick + 1, total, myTurn: cur === 0, current: cur === null ? null : team(cur).name,
       myPicks: D.order.map((t, i) => i).filter(i => D.order[i] === 0).map(i => i + 1),
-      pool: D.pool.map(([id, name, pos, lg, age, ovr, pot, from]) => ({ id, name, pos, league: lg, age, ovr, potential: pot, from }))
+      pool: D.pool.map(([id, name, pos, lg, age, ovr, pot, from, , , , en]) => ({ id, name, pos, league: lg, age, ovr, potential: pot, from, en }))
         .sort((a, b) => (b.potential * 0.7 + b.ovr * 0.3) - (a.potential * 0.7 + a.ovr * 0.3)),
       picks: D.picks.slice().reverse(), rosterSize: myTeam().roster.length, rosterMax: ROSTER_MAX,
     };
@@ -1055,7 +1055,7 @@ function createService(seed) {
       const p = S.players[base.id] || base;      // 팀에 있는 선수는 현재(훈련 반영) 상태로
       if (league && p.league !== league) continue;
       if (pos === 'P' ? !p.isPitcher : pos === 'H' ? p.isPitcher : pos && p.pos !== pos) continue;
-      if (q && !p.name.toLowerCase().includes(q)) continue;
+      if (q && !p.name.toLowerCase().includes(q) && !(p.en || (DB_BY_ID.get(String(p.id).split('@')[0]) || {}).en || '').toLowerCase().includes(q)) continue;
       res.push(p);
     }
     res.sort((a, b) => b.ovr - a.ovr || a.name.localeCompare(b.name));

@@ -422,7 +422,7 @@
       <p class="title" id="scoutTitle">🔍 선수 영입</p>
       <p class="muted" style="margin:0 0 10px">KBO·NPB·MLB 역대 선수 전체에서 찾을 수 있습니다. 능력치는 실제 기록(리그 평균 대비 OPS·평균자책점)으로 계산했습니다. 다른 구단 소속 선수는 데려올 수 없습니다.</p>
       <div class="scout-filters">
-        <input id="scoutQ" type="search" placeholder="이름 검색 (예: 이승엽, Ichiro, Ruth)" autocomplete="off">
+        <input id="scoutQ" type="search" placeholder="이름 검색 (예: 이승엽, 이치로, Ruth)" autocomplete="off">
         <select id="scoutLeague" aria-label="리그"><option value="">전체 리그</option><option value="KBO">KBO</option><option value="NPB">NPB</option><option value="MLB">MLB</option></select>
         <select id="scoutPos" aria-label="포지션"><option value="">전체 포지션</option><option value="P">투수 전체</option><option value="SP">선발 SP</option><option value="RP">불펜 RP</option><option value="H">야수 전체</option><option value="C">포수 C</option><option value="1B">1루 1B</option><option value="2B">2루 2B</option><option value="3B">3루 3B</option><option value="SS">유격 SS</option><option value="OF">외야 OF</option><option value="DH">지명 DH</option></select>
       </div>
@@ -1355,7 +1355,7 @@
     $('draftTools').hidden = d.done;
     $('draftAuto').disabled = d.done;
     $('draftSkip').disabled = !d.myTurn;
-    if (!d.done) d.pool.filter(p => (!draftLg || p.league === draftLg) && (!q || p.name.toLowerCase().includes(q) || (p.from || '').toLowerCase().includes(q))).slice(0, 40).forEach(p => {
+    if (!d.done) d.pool.filter(p => (!draftLg || p.league === draftLg) && (!q || p.name.toLowerCase().includes(q) || (p.en || '').toLowerCase().includes(q) || (p.from || '').toLowerCase().includes(q))).slice(0, 40).forEach(p => {
       const row = document.createElement('div');
       row.className = 'scout-row';
       row.innerHTML = `<div style="min-width:0"><div style="font-weight:600">${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)} · ${p.age}세${p.from ? ' · ' + esc(p.from) : ''}</span></div>` +

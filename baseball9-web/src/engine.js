@@ -737,10 +737,11 @@ const OPP_POS = ['SP', 'RP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF'
 
 // players.js 행: [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, 최다 소속(계보), 첫 시즌, 마지막 시즌, 전성기, 국가, 동일인 키]
 function playerFromRow(r) {
-  const [id, name, pos, league, by, ovr, pot, last, most, first, lastY, peak, country, person, sub] = r;
+  const [id, name, pos, league, by, ovr, pot, last, most, first, lastY, peak, country, person, sub, en] = r;
   const p = new Player(name, pos, league, by ? peak - by : 28, ovr, pot, 0, 1, last, peak);
   p.id = id; p.most = most; p.first = first; p.last = lastY;
   p.country = country || ''; p.person = person || id;   // 리그가 달라도 같은 사람이면 같은 person
+  p.en = en || '';                                         // 영어 이름(검색용, NPB·MLB)
   p.sub = sub && sub.length ? sub : null;                 // 타자 [컨택,파워,선구,주루] / 투수 [탈삼진,제구]
   p.birthYear = by || 0;
   return p;
@@ -748,7 +749,7 @@ function playerFromRow(r) {
 // 같은 선수를 새 객체로 복사 (국가대표·올스타처럼 소속팀 피로와 분리할 때)
 function clonePlayer(p) {
   const c = new Player(p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era);
-  Object.assign(c, { id: p.id, most: p.most, first: p.first, last: p.last, country: p.country, person: p.person, birthYear: p.birthYear, sub: p.sub });
+  Object.assign(c, { id: p.id, most: p.most, first: p.first, last: p.last, country: p.country, person: p.person, birthYear: p.birthYear, sub: p.sub, en: p.en });
   return c;
 }
 const buildAllPlayers = () => PLAYERS.map(playerFromRow);

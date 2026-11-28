@@ -18,10 +18,12 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import recent
+import korean_names as kn
 from collections import defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -652,19 +654,97 @@ def link_persons(rows):
     return linked
 
 
+ASIAN = {"JPN", "KOR", "TPE", "CHN"}
+
+
+def korean_names(rows):
+    """NPB·MLB 선수 이름을 한국어로. KBO 이름 > 위키데이터 한국어 표기 > 단어 사전 > 규칙 음역 순.
+    rows 는 link_persons 전(r[13]=성, r[14]=이름 로마자)이어야 함. 원래 영어 이름은 r 끝(en)에 붙이지 않고 {id: en} 으로 돌려줌."""
+    wd = kn.load_wikidata()
+    exact = {}
+    for _q, en, ko, b in wd:
+        if en and re.search("[가-힣]", ko):
+            exact.setdefault((kn.key_token(re.sub(r"\(.*?\)", "", en)), b), ko)
+    pairs, src, names, english = [], {}, {}, {}
+    plain = lambda n: re.sub(r"\s*\(.*?\)\s*", "", n or "").strip()
+    for r in rows:
+        if r[3] == "KBO":
+            continue
+        en = plain(r[1])
+        english[r[0]] = en
+        hit = exact.get((kn.key_token(en), str(r[4] or "")))
+        if hit:
+            names[r[0]] = hit
+            src[r[0]] = "wd"
+            if r[12] not in ASIAN:
+                pairs.append((en, hit))
+    tokens = kn.learn_tokens(pairs)
+    stats = {"wd": sum(1 for v in src.values() if v == "wd")}
+    for r in rows:
+        if r[3] == "KBO" or r[0] in names:
+            continue
+        last, first = (r[13] or "").strip(), (r[14] or "").strip()
+        if not (last or first):
+            parts = plain(r[1]).split()
+            first, last = " ".join(parts[:-1]), (parts[-1] if parts else "")
+        western = kn.SPANISH_COUNTRIES | {"USA", "CAN", "AUS", "NED", "GBR", "GER", "ITA", "FRA"}
+        if r[12] == "JPN" or (r[3] == "NPB" and r[12] not in western):      # NPB 의 일본·아시아계는 일본어 표기
+            names[r[0]] = kn.japanese_name(last, first)
+            src[r[0]] = "jp"
+        else:
+            spanish = r[12] in kn.SPANISH_COUNTRIES
+            def word(w):
+                k = kn.key_token(w)
+                return tokens.get(k) or kn.latin_word(w, spanish)
+            last_clean = kn.strip_suffix(last)
+            f = " ".join(word(x) for x in re.split(r"[\s\-]+", first) if x)
+            l = " ".join(word(x) for x in re.split(r"[\s\-]+", last_clean) if x)
+            names[r[0]] = f"{f} {l}".strip()
+            all_dict = all(kn.key_token(x) in tokens for x in re.split(r"[\s\-]+", first + " " + last_clean) if x)
+            src[r[0]] = "dict" if all_dict else "rule"
+        stats[src[r[0]]] = stats.get(src[r[0]], 0) + 1
+    return names, src, english, stats
+
+
+def unify_names(rows, kor, ksrc):
+    """같은 사람(리그가 다른 행)은 한 이름으로: KBO 한글 이름 > 위키데이터 > 일본어 규칙 > 나머지"""
+    groups = defaultdict(list)
+    for r in rows:
+        if r[13]:
+            groups[r[13]].append(r)
+    order = {"KBO": 0, "wd": 1, "jp": 2, "dict": 3, "rule": 4}
+    for g in groups.values():
+        def rank(r):
+            return 0 if r[3] == "KBO" else order.get(ksrc.get(r[0], "rule"), 4)
+        best = min(g, key=rank)
+        name = best[1] if best[3] == "KBO" else kor.get(best[0])
+        if not name:
+            continue
+        for r in g:
+            if r[3] != "KBO":
+                kor[r[0]] = name
+
+
 def main():
     rows = build_kbo() + build_npb() + build_mlb()
     for r in rows:
         off = LEAGUE_OFFSET[r[3]]
         r[5] = max(40, r[5] + off)
         r[6] = max(r[5], r[6] + off)
+    kor, ksrc, en_names, kstats = korean_names(rows)
+    print("korean names", kstats, file=sys.stderr)
     linked = link_persons(rows)
+    unify_names(rows, kor, ksrc)
+    for r in rows:
+        if r[3] != "KBO" and r[0] in kor and kor[r[0]]:
+            r[1] = kor[r[0]]
+        r.append(en_names.get(r[0], ""))
     print(f"linked {linked} cross-league duplicates", file=sys.stderr)
     rows = dedupe_names(rows)
     rows.sort(key=lambda r: (r[3], -r[5], r[1]))
     header = ("// 선수 DB — tools/build_players.py 로 생성 (직접 수정하지 마세요)\n"
               "// 출처: KBO 공식 기록, NPB 공식/npbstats, MLB Lahman Database (frankmkpark/mnk_datasets 정리본)\n"
-              "// [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, 최다 소속 구단(계보), 첫 시즌, 마지막 시즌, 전성기 시즌, 국가, 동일인 키, 세부능력: 타자[컨택,파워,선구,주루] / 투수[탈삼진,제구]]\n")
+              "// [id, 이름, 포지션, 리그, 출생연도, OVR, 잠재력, 마지막 소속, 최다 소속 구단(계보), 첫 시즌, 마지막 시즌, 전성기 시즌, 국가, 동일인 키, 세부능력: 타자[컨택,파워,선구,주루] / 투수[탈삼진,제구], 영어 이름(검색용, NPB·MLB)]\n")
     body = "const PLAYERS = [\n" + ",\n".join(json.dumps(r, ensure_ascii=False, separators=(",", ":")) for r in rows) + "\n];\n"
     leagues = {
         "KBO": {"name": "KBO 리그", "last": LEAGUE_LAST["KBO"], "groups": ["드림", "나눔"],
