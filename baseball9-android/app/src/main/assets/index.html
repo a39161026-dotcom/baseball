@@ -86,7 +86,17 @@
   .banner.auto { background: #1b4d86; color: var(--text); }
   .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: #2a1512; color: #ffd9d5; border: 1px solid var(--red); padding: 10px 14px; border-radius: 8px; font-size: 13px; max-width: calc(100% - 32px); z-index: 20; }
 
-  .gameLayout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; }
+  .gameLayout { display: grid; grid-template-columns: 270px minmax(0, 1fr) 270px; gap: 12px; align-items: start; }
+  .gameLayout .panel { margin-bottom: 12px; }
+  .lineup-t { width: 100%; font-size: 12.5px; } .lineup-t th { color: var(--muted); font-weight: 500; padding: 4px 4px; text-align: center; } .lineup-t td { padding: 5px 4px; border-top: 1px solid var(--line); text-align: center; white-space: nowrap; }
+  .lineup-t td.n { text-align: left; } .lineup-t tr.cur td { background: rgba(255,122,26,.18); color: #fff; font-weight: 800; }
+  .pcard .ph { display: flex; align-items: center; gap: 10px; }
+  .pcard .ph .badge { width: 44px; height: 44px; font-size: 16px; }
+  .pcard .ph .nm { font-weight: 800; font-size: 16px; line-height: 1.25; } .pcard .ph .sub { color: var(--dim); font-size: 12px; }
+  .pcard .role { display: inline-block; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; }
+  .pcard .role.p { background: #ff7a1a; color: #fff; } .pcard .role.b { background: #2f7de1; color: #fff; }
+  .pcard .ovr { margin-left: auto; text-align: center; font-weight: 800; font-size: 22px; line-height: 1; } .pcard .ovr small { display: block; font-size: 10px; color: var(--muted); font-weight: 600; }
+  .pcard .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin-top: 10px; font-size: 12.5px; } .pcard .kv span { color: var(--muted); } .pcard .kv b { font-weight: 600; text-align: right; }
   #field { width: 100%; height: clamp(250px, 78vw, 420px); display: block; background: #1c2c4d; border-radius: 10px; }
   .stage { position: relative; }
   button.viewbtn { position: absolute; right: 10px; bottom: 10px; background: #fff; color: #111; border: 0; border-radius: 8px; padding: 8px 12px; font-weight: 700; min-height: 0; font-size: 13px; }
@@ -107,6 +117,33 @@
   .nv-tabs button.on { background: #2f7de1; color: #fff; }
   .nv-tabs button .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #ff5a4f; vertical-align: top; margin-left: 2px; }
   details.ls { margin-top: 10px; }
+  .lineupGrid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; align-items: start; }
+  .tt { font-weight: 800; margin: 2px 0 6px; color: #fff; } .tt .muted { font-weight: 400; font-size: 12px; }
+  .lt { width: 100%; font-size: 13px; } .lt th { color: var(--muted); font-weight: 500; padding: 5px 6px; text-align: center; background: #19233a; }
+  .lt td { padding: 7px 6px; border-top: 1px solid var(--line); text-align: center; white-space: nowrap; cursor: pointer; }
+  .lt td.n { text-align: left; font-weight: 700; } .lt tr:hover td { background: rgba(255,255,255,.05); }
+  .lt tr.sel td { background: rgba(255,122,26,.25); } .lt tr.st td { color: var(--gold); }
+  .lt .ok { color: #43c06b; } .lt .mid { color: #e6b800; } .lt .bad { color: #ff5a4f; }
+  .ltd { margin: 0; min-height: 220px; font-size: 13px; } .ltd .hint { color: var(--muted); text-align: center; padding-top: 80px; }
+  @media (max-width: 820px) { .lineupGrid { grid-template-columns: 1fr; } }
+  .subtabs { display: flex; gap: 4px; margin-bottom: 10px; }
+  .subtabs button { background: #222d44; color: var(--dim); border-radius: 6px; min-height: 38px; padding: 6px 16px; font-weight: 700; }
+  .subtabs button.on { background: #fff; color: #14203a; }
+  .pager { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+  .pager button { min-height: 34px; min-width: 40px; padding: 4px 10px; border-radius: 4px; background: #222d44; color: var(--dim); font-weight: 700; }
+  .pager button.on { background: var(--gold); color: #fff; }
+  .sched { width: 100%; font-size: 13.5px; } .sched th { color: var(--muted); font-weight: 500; padding: 6px 8px; text-align: center; }
+  .sched td { padding: 9px 8px; border-top: 1px solid var(--line); text-align: center; white-space: nowrap; }
+  .sched td.opp { text-align: left; font-weight: 700; } .sched tr.now td { background: rgba(255,122,26,.16); }
+  .sched .res { display: inline-block; min-width: 26px; padding: 1px 6px; border-radius: 4px; font-weight: 800; font-size: 12px; margin-right: 6px; color: #fff; }
+  .sched .res.w { background: #e5484d; } .sched .res.l { background: #3b66d6; } .sched .tag { color: var(--muted); font-size: 12px; }
+  .sched .badge.sm { width: 22px; height: 22px; font-size: 10px; border-width: 1px; margin-right: 6px; vertical-align: middle; }
+  .cmp { display: grid; grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr); align-items: center; gap: 8px; margin: 8px 0; font-variant-numeric: tabular-nums; }
+  .cmp .l, .cmp .r { display: flex; align-items: center; gap: 6px; } .cmp .l { justify-content: flex-end; }
+  .cmp .l i, .cmp .r i { display: block; height: 14px; border-radius: 3px; min-width: 2px; }
+  .cmp .l i { background: var(--gold); } .cmp .r i { background: #6f7fa3; }
+  .cmp .k { text-align: center; color: var(--dim); font-size: 13px; } .cmp b { font-size: 14px; }
+  .cmp-head { display: flex; justify-content: space-between; font-weight: 800; margin-bottom: 4px; } .cmp-head span:first-child { color: var(--gold); }
   #log { height: 250px; overflow-y: auto; background: #0e1524; border: 1px solid #2a3957; border-radius: 10px; padding: 8px 10px; font-family: var(--mono); font-size: 12.5px; margin-top: 10px; }
   #log div { margin-bottom: 3px; line-height: 1.5; overflow-wrap: anywhere; }
   .k-PITCH { color: var(--text); } .k-HIT { color: var(--led); font-weight: 700; } .k-OUT { color: #c6d3cb; }
@@ -133,9 +170,10 @@
     #game { display: flex; flex-direction: column; }
     #game .nv { order: 1; } #game .banner { order: 2; }
     #game .gameLayout { display: contents; }
-    #game .gameLayout > :first-child { order: 3; }
+    #game .gl-center { order: 3; }
     #game .controls { order: 4; }
-    #game .gameLayout > .side { order: 5; margin-top: 12px !important; }
+    #game .gl-right { order: 5; margin-top: 12px; }
+    #game .gl-left { order: 6; }
     .board .big { font-size: 26px; }
     #log { height: 220px; }
     .controls .group { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -348,20 +386,17 @@
   <section id="setup" hidden>
     <div class="panel">
       <p class="title" id="setupTitle"></p>
-      <div class="grid2">
-        <div>
-          <p class="lbl">타순 (▲▼로 순서 변경)</p>
-          <p class="muted" id="lineupWarn" style="margin:0 0 6px"></p>
-          <ol id="lineupEdit" style="padding-left:20px"></ol>
-          <p class="lbl" style="margin-top:12px">벤치 (대타·대주자 후보)</p>
-          <div id="benchList" class="side"></div>
+      <p class="muted" id="lineupWarn" style="margin:0 0 8px"></p>
+      <div class="lineupGrid">
+        <div style="min-width:0">
+          <div class="tt">1군 타순 <span class="muted">— 행을 눌러 선택하고, 다른 행을 누르면 서로 교체</span></div>
+          <div class="scroll-x"><table class="lt" id="ltLineup"></table></div>
+          <div class="tt" style="margin-top:14px">벤치 (대타·대주자 후보)</div>
+          <div class="scroll-x"><table class="lt" id="ltBench"></table></div>
+          <div class="tt" style="margin-top:14px">투수진 <span class="muted">— 선발 투수를 눌러 지정</span></div>
+          <div class="scroll-x"><table class="lt" id="ltPit"></table></div>
         </div>
-        <div>
-          <label class="lbl" for="starterSel">선발 투수 (피로가 낮을수록 좋음)</label>
-          <select id="starterSel" style="width:100%;margin-top:4px"></select>
-          <p class="lbl" style="margin-top:12px">투수진</p>
-          <div id="pitchList" class="side"></div>
-        </div>
+        <div class="panel ltd" id="ltDetail"></div>
       </div>
       <div class="row" style="margin-top:12px">
         <button class="gold" id="btnStart">▶ 경기 시작</button>
@@ -370,7 +405,6 @@
     </div>
   </section>
 
-  <!-- 경기: 진행 -->
   <section id="game" hidden>
     <div class="nv" id="nvBar">
       <div class="nv-teams">
@@ -386,19 +420,19 @@
     </div>
     <div class="banner" id="banner"></div>
     <div class="gameLayout">
-      <div style="min-width:0">
+      <div class="gl-left">
+        <div class="panel"><p class="title">📊 스코어보드</p><div class="scroll-x"><table class="linescore" id="linescore"></table></div></div>
+        <div class="panel"><p class="title">📋 우리 타순</p><div class="scroll-x"><table class="lineup-t" id="myLineupT"></table></div></div>
+      </div>
+      <div class="gl-center" style="min-width:0">
         <div class="stage"><canvas id="field"></canvas><button class="viewbtn" id="viewToggle">주루보기</button></div>
         <div class="nv-tabs" id="logTabs"></div>
         <div id="log" aria-live="polite"></div>
-        <details class="ls"><summary class="lbl">스코어보드 (이닝별 점수)</summary><div class="scroll-x"><table class="linescore" id="linescore"></table></div></details>
       </div>
-      <div class="panel side" style="margin:0">
-        <p class="title">📋 우리 타순</p>
-        <ol id="myLineup" style="padding-left:20px"></ol>
-        <p class="title" style="margin-top:12px">⚾ 우리 투수</p>
-        <div id="myPitcher"></div>
-        <p class="title" style="margin-top:12px">⚾ 상대 투수</p>
-        <div id="oppPitcher"></div>
+      <div class="gl-right">
+        <div class="panel pcard" id="cardP"></div>
+        <div class="panel pcard" id="cardB"></div>
+        <div class="panel"><p class="title">🔄 우리 투수 상태</p><div id="myPitcher"></div></div>
       </div>
     </div>
     <div class="panel controls" style="margin-top:12px">
@@ -435,6 +469,7 @@
       <div id="resScore" style="font-size:18px;margin-top:6px"></div>
       <div id="resDetail" class="muted" style="margin-top:4px"></div>
       <div class="scroll-x" style="margin:12px 0"><table class="linescore" id="resLinescore"></table></div>
+      <div class="panel" style="text-align:left"><p class="title">📊 결과 요약</p><div id="resChart"></div></div>
       <div class="panel box scroll-x" style="text-align:left"><p class="title">🏏 우리 타자</p><table class="stats" id="boxBat"></table></div>
       <div class="grid2" style="text-align:left">
         <div class="panel box scroll-x"><p class="title" id="boxMineTitle"></p><table class="stats" id="boxMine"></table></div>
@@ -452,7 +487,13 @@
   </section>
 
   <section id="stand" hidden>
-    <div class="panel"><p class="title" id="standTitle"></p><div class="scroll-x"><table class="stand" id="fullStand"></table></div></div>
+    <div class="subtabs" id="standTabs"><button data-st="rank" class="on">팀 순위</button><button data-st="sched">경기 일정</button></div>
+    <div class="panel" id="rankPanel"><p class="title" id="standTitle"></p><div class="scroll-x"><table class="stand" id="fullStand"></table></div></div>
+    <div class="panel" id="schedPanel" hidden>
+      <p class="title" id="schedTitle">📅 우리 팀 경기 일정</p>
+      <div class="pager" id="schedPager"></div>
+      <div class="scroll-x"><table class="sched" id="schedTable"></table></div>
+    </div>
   </section>
 
   <!-- 기록 -->
@@ -34098,7 +34139,7 @@ function createService(seed) {
       stats: {}, tp: keep && S ? S.tp : 10, recent: [], news: [], done: false, champion: null,
       allStar: { day: length >= 18 ? Math.floor(length / 2) : -1, done: false, result: null },
       intl: S && S.intl || null, voices: carry ? carry.voices : [], trades: carry ? carry.trades : [],
-      draft: null, devReport, offers: [], offerDay: 0, articles: keep && S ? (S.articles || []) : [],
+      draft: null, devReport, offers: [], offerDay: 0, articles: keep && S ? (S.articles || []) : [], history: [],
     };
     prevLeader = null;
     if (!keep) {
@@ -34277,7 +34318,8 @@ function createService(seed) {
       S.recent = S.recent.slice(-10);
       S.tp += win ? 3 : 2;                       // 훈련 포인트
       userWin = win; userOpp = opp;
-    } else S.tp += 1;                            // 휴식일
+      (S.history = S.history || []).push({ day: S.day, opp: opp.name, home: S.schedule[S.day].some(([a, b]) => a === 0), result: win ? '승' : '패', score: `${gs.mine.score}:${gs.theirs.score}` });
+    } else { S.tp += 1; (S.history = S.history || []).push({ day: S.day, bye: true }); }                            // 휴식일
     const news = [], others = [];
     S.schedule[S.day].forEach(([a, b]) => {
       if (a === 0 || b === 0 || isGhost(a) || isGhost(b)) return;
@@ -34371,7 +34413,7 @@ function createService(seed) {
     const m = myTeam();
     return {
       teamName: m.name, record: { wins: m.w, losses: m.l },
-      roster: m.roster.map(p => { joinMyTeam(p); return { ...p.toDict(), trainCost: trainCost(p), mood: moodOf(p.morale) }; }),
+      roster: m.roster.map(p => { joinMyTeam(p); const row = p.isPitcher ? pitRow(p) : batRow(p); return { ...p.toDict(), trainCost: trainCost(p), mood: moodOf(p.morale), stat: row || null, season: statLine(p) }; }),
       recent: S.recent.slice(-5), opponents: [], difficulties: Object.entries(DIFFICULTY).map(([id, v]) => ({ id, label: v[1] })),
       tp: S.tp,
     };
@@ -34410,7 +34452,9 @@ function createService(seed) {
       score: { mine: mine.score, theirs: theirs.score }, hits: { mine: mine.hits, theirs: theirs.hits },
       innings: cols, linescore: { mine: ls(mine, cols), theirs: ls(theirs, cols) },
       pitchTotal: gs.pitchTotal, done: gs.done, difficulty: e.difficulty,
-      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), current: i === curSlot })),
+      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), current: i === curSlot, ab: (e.bat.get(p.id) || {}).ab || 0, h: (e.bat.get(p.id) || {}).h || 0, hr: (e.bat.get(p.id) || {}).hr || 0, rbi: (e.bat.get(p.id) || {}).rbi || 0 })),
+      cardB: batter ? { ...pdict(batter), season: statLine(batter), today: e.bat.get(batter.id) || {}, side: gs.top ? 'mine' : 'theirs' } : null,
+      cardP: gs.defense().pitcher ? { ...pdict(gs.defense().pitcher, gs.defense().currentLine()), season: statLine(gs.defense().pitcher), side: gs.top ? 'theirs' : 'mine' } : null,
       batter: batter ? pdict(batter) : null,
       plate: e.plate, defense: defenseMap(gs.defense()), upNext: upNext(gs.offense(), 3), batterNo: gs.offense().currentSlot + 1,
       myPitcher: mine.pitcher ? pdict(mine.pitcher, mine.currentLine()) : null,
@@ -34427,6 +34471,11 @@ function createService(seed) {
     if (gs.done && g.kind === 'intl' && S.intl) {
       const last = S.intl.results[S.intl.results.length - 1];
       d.extra = (last ? last.games : []).concat(S.intl.champion ? [`🏆 우승: ${COUNTRY_NAME[S.intl.champion]}`] : []);
+    }
+    if (gs.done) {
+      const side = t => { const ids = new Set(t.roster.map(p => p.id)), o = { r: t.score, h: 0, hr: 0, bb: 0, k: 0, sb: 0 };
+        e.bat.forEach((b, id) => { if (ids.has(id)) { o.h += b.h || 0; o.hr += b.hr || 0; o.bb += b.bb || 0; o.k += b.k || 0; o.sb += b.sb || 0; } }); return o; };
+      d.summary = { mine: side(mine), theirs: side(theirs), myName: mine.name, oppName: theirs.name };
     }
     if (gs.done) {
       d.box = { mine: mine.pitcherLines.map(l => pdict(l.pitcher, l)), theirs: theirs.pitcherLines.map(l => pdict(l.pitcher, l)) };
@@ -34535,6 +34584,18 @@ function createService(seed) {
       results.push(r);
     }
     return [200, { results, season: seasonView(), stoppedForAllStar }];
+  }
+
+  // 우리 팀 경기 일정 (일차별 상대·장소·결과)
+  function scheduleView() {
+    const hist = new Map((S.history || []).map(h => [h.day, h]));
+    const rows = S.schedule.map((day, d) => {
+      const m = day.find(([a, b]) => a === 0 || b === 0), oppId = m[0] === 0 ? m[1] : m[0], h = hist.get(d);
+      if (isGhost(oppId)) return { day: d + 1, bye: true, done: d < S.day };
+      const opp = team(oppId);
+      return { day: d + 1, opp: opp.name, league: opp.league, home: m[0] === 0, strength: teamStrength(opp), result: h && h.result || null, score: h && h.score || null, done: d < S.day, today: d === S.day && !S.done };
+    });
+    return { rows, allStarDay: S.allStar && S.allStar.day >= 0 ? S.allStar.day + 1 : 0 };
   }
 
   // ── 올스타전 ──
@@ -35134,7 +35195,7 @@ function createService(seed) {
     const pl = Object.values(S.players).map(p => [p.id, p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era, p.fatigue, p.first || 0, p.last || 0, p.most || '',
       p.morale === undefined ? null : p.morale, p.birthYear || 0, p.rookie ? 1 : 0, p.ageSet ? 1 : 0]);
     const teams = S.teams.map(t => ({ id: t.id, name: t.name, user: t.user, group: t.group, league: t.league, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak, roster: t.roster.map(p => p.id) }));
-    return { version: 5, articles: S.articles || [], started: S.started !== false, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null, offers: S.offers || [], offerDay: S.offerDay || 0,
+    return { version: 5, articles: S.articles || [], history: S.history || [], started: S.started !== false, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null, offers: S.offers || [], offerDay: S.offerDay || 0,
       devReport: S.devReport || null, mode: S.mode, year: S.year, length: S.length, difficulty: S.difficulty, day: S.day, tp: S.tp, done: S.done, champion: S.champion,
       recent: S.recent, news: S.news, schedule: S.schedule, stats: S.stats, players: pl, teams };
   }
@@ -35154,7 +35215,7 @@ function createService(seed) {
       if (b) { p.person = at < 0 ? b.person : `${b.person}@${vid.slice(at + 1)}`; p.country = b.country; p.sub = b.sub; if (!p.birthYear) p.birthYear = b.birthYear; } else { p.person = p.id; p.sub = null; }
     });
     const teams = o.teams.map(t => ({ group: '', league: o.league || 'KBO', ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
-    S = { version: 4, articles: o.articles || [], league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
+    S = { version: 4, articles: o.articles || [], history: o.history || [], league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
       voices: o.voices || [], trades: o.trades || [], draft: o.draft && o.draft.pool.every(r => DB_BY_ID.has(r[8] || r[0])) ? o.draft : null,   // 옛 가상 신인 드래프트 저장은 버림
       devReport: o.devReport || null, offers: o.offers || [], offerDay: o.offerDay || 0,
       mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
@@ -35198,6 +35259,7 @@ function createService(seed) {
     else if (key === 'GET api/draft') res = [200, draftView()];
     else if (key === 'POST api/draft/pick') res = draftPick(body);
     else if (key === 'POST api/draft/auto') res = draftAutoAll();
+    else if (key === 'GET api/schedule') res = [200, scheduleView()];
     else if (key === 'GET api/articles') res = [200, { articles: (S.articles || []).slice(0, 40) }];
     else if (key === 'GET api/locker') res = [200, { voices: (S.voices || []).slice().reverse(),
       roster: myTeam().roster.map(p => { joinMyTeam(p); return { name: p.name, pos: p.pos, morale: p.morale, mood: moodOf(p.morale), age: p.age }; })
@@ -35478,66 +35540,58 @@ function createService(seed) {
   };
 
   // ── 경기 준비 ──
+  let selPlayer = null, starterId = null;
+  const fatIcon = f => f < 25 ? '<span class="ok">▲</span>' : f < 50 ? '<span class="mid">■</span>' : '<span class="bad">▼</span>';
   function renderSetup() {
     league = api('GET', '/api/league');
     const s = api('GET', '/api/season');
     if (s.done) { toast('시즌이 끝났습니다. 홈에서 다음 시즌을 시작하세요.'); go('home'); return; }
-    $('setupTitle').textContent = `⚾ ${s.day + 1}일차 · vs ${s.today.opponent} 경기 준비`;
+    $('setupTitle').textContent = `⚾ ${s.day + 1}일차 · vs ${s.today.opponent} 경기 준비 — 라인업 관리`;
+    const byId = id => league.roster.find(p => p.id === id);
     const hitters = league.roster.filter(p => p.pos !== 'SP' && p.pos !== 'RP');
     const pitchers = league.roster.filter(p => p.pos === 'SP' || p.pos === 'RP');
-    if (!manualLineup || manualLineup.some(id => !hitters.find(p => p.id === id))) {
-      manualLineup = positionalLineup(hitters).map(p => p.id);
-    }
-    const ol = $('lineupEdit');
-    ol.innerHTML = '';
-    manualLineup.forEach((id, i) => {
-      const p = hitters.find(x => x.id === id);
-      const li = document.createElement('li');
-      li.style.marginBottom = '6px';
-      li.innerHTML = `<div style="display:flex;gap:6px;align-items:center"><span style="flex:1;min-width:0"><span class="muted">[${esc(p.pos)}]</span> ${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''} <span class="muted">OVR ${p.effOvr} · 피로 ${p.fatigue}</span>${skillHtml(p.pos, p.sub)}</span><span class="mv" style="display:flex;gap:4px;flex:none"></span></div>`;
-      const up = mkBtn('▲', () => { [manualLineup[i - 1], manualLineup[i]] = [manualLineup[i], manualLineup[i - 1]]; renderSetup(); });
-      const dn = mkBtn('▼', () => { [manualLineup[i + 1], manualLineup[i]] = [manualLineup[i], manualLineup[i + 1]]; renderSetup(); });
-      up.disabled = i === 0; dn.disabled = i === manualLineup.length - 1;
-      up.setAttribute('aria-label', `${p.name} 타순 올리기`); dn.setAttribute('aria-label', `${p.name} 타순 내리기`);
-      li.querySelector('.mv').append(up, dn);
-      ol.appendChild(li);
-    });
+    if (!manualLineup || manualLineup.some(id => !hitters.find(p => p.id === id))) manualLineup = positionalLineup(hitters).map(p => p.id);
+    if (!starterId || !pitchers.find(p => p.id === starterId)) starterId = ([...pitchers].sort((a, b) => (a.pos === 'SP' ? 0 : 1) - (b.pos === 'SP' ? 0 : 1) || a.fatigue - b.fatigue)[0] || {}).id;
+    const avg = p => p.stat && p.stat.ab ? p.stat.avg.toFixed(3).replace(/^0/, '') : '-';
+    const hRow = (p, i) => `<tr data-id="${esc(p.id)}" class="${selPlayer === p.id ? 'sel' : ''}"><td>${i === null ? '' : i + 1}</td><td class="n">${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''}</td><td>${esc(p.pos)}</td><td>${p.effOvr}</td><td>${fatIcon(p.fatigue)} ${p.fatigue}%</td><td>${avg(p)}</td><td>${p.stat ? p.stat.hr : 0}</td><td>${p.stat ? p.stat.rbi : 0}</td><td>${p.stat ? p.stat.sb : 0}</td></tr>`;
+    const hHead = '<tr><th>타순</th><th>이름</th><th>위치</th><th>OVR</th><th>상태</th><th>타율</th><th>홈런</th><th>타점</th><th>도루</th></tr>';
+    $('ltLineup').innerHTML = hHead + manualLineup.map((id, i) => hRow(byId(id), i)).join('');
+    const inLineup = new Set(manualLineup), bench = hitters.filter(p => !inLineup.has(p.id));
+    $('ltBench').innerHTML = hHead.replace('<th>타순</th>', '<th></th>') + (bench.length ? bench.map(p => hRow(p, null)).join('') : '<tr><td colspan="9" class="muted">벤치 없음</td></tr>');
+    $('ltPit').innerHTML = '<tr><th>역할</th><th>이름</th><th>OVR</th><th>상태</th><th>평균자책</th><th>승-패</th><th>삼진</th></tr>' + [...pitchers].sort((a, b) => (a.pos === 'SP' ? 0 : 1) - (b.pos === 'SP' ? 0 : 1) || b.effOvr - a.effOvr).map(p =>
+      `<tr data-id="${esc(p.id)}" class="${selPlayer === p.id ? 'sel' : ''} ${starterId === p.id ? 'st' : ''}"><td>${starterId === p.id ? '선발 ★' : esc(p.pos)}</td><td class="n">${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''}</td><td>${p.effOvr}</td><td>${fatIcon(p.fatigue)} ${p.fatigue}%</td><td>${p.stat && p.stat.era !== null && p.stat.era !== undefined ? p.stat.era.toFixed(2) : '-'}</td><td>${p.stat ? p.stat.w + '-' + p.stat.l : '-'}</td><td>${p.stat ? p.stat.k : 0}</td></tr>`).join('');
+    // 포지션 균형 안내
     const labels = { C: '포수', '1B': '1루수', '2B': '2루수', '3B': '3루수', SS: '유격수', OF: '외야수' }, want = { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3 };
-    const have = pos => manualLineup.filter(id => hitters.find(x => x.id === id).pos === pos).length;
+    const have = pos => manualLineup.filter(id => byId(id).pos === pos).length;
     const lack = Object.keys(want).filter(pos => have(pos) < want[pos]).map(pos => have(pos) === 0 ? `${labels[pos]} 없음` : `${labels[pos]} ${have(pos)}/${want[pos]}명`);
-    const extra = Object.keys(want).reduce((a, pos) => a + Math.max(0, have(pos) - want[pos]), 0);        // 남는 1명은 지명타자
-    $('lineupWarn').textContent = lack.length || extra > 1 ? `⚠ 포지션 불균형: ${lack.join(' · ') || '같은 포지션 중복'} — 벤치 선수를 넣거나 "포지션 맞춰 자동 구성"을 누르세요.` : '✔ 포지션이 맞습니다 (포수·내야 4·외야 3 + 지명타자).';
-    const inLineup = new Set(manualLineup);
-    const bench = hitters.filter(p => !inLineup.has(p.id));
-    $('benchList').innerHTML = bench.length
-      ? '<ul style="padding-left:18px">' + bench.map(p => `<li>${esc(p.name)} [${esc(p.pos)}] · OVR ${p.effOvr} <button class="sm" data-swap="${esc(p.id)}">타순에 넣기</button></li>`).join('') + '</ul>'
-      : '<span class="muted">벤치 없음</span>';
-    $('benchList').querySelectorAll('[data-swap]').forEach(b => {
-      b.onclick = () => {   // 벤치 선수를 타순에서 OVR 가장 낮은 선수와 교체
-        const inc = hitters.find(x => x.id === b.dataset.swap);
-        const cur = manualLineup.map(id => hitters.find(x => x.id === id));
-        const need = { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3 }, cnt = pos => cur.filter(x => x.pos === pos).length;
-        const weakest = arr => [...arr].sort((a, c) => a.effOvr - c.effOvr)[0];
-        let low;
-        if (!need[inc.pos]) low = weakest(cur);                                                // 지명타자형 → 가장 약한 선수
-        else if (cnt(inc.pos) >= need[inc.pos]) low = weakest(cur.filter(x => x.pos === inc.pos));  // 같은 포지션끼리 교체
-        else low = weakest(cur.filter(x => cnt(x.pos) > (need[x.pos] || 0)).concat([])) || weakest(cur);   // 비는 포지션 → 남는 포지션 선수와 교체
-        manualLineup[manualLineup.indexOf((low || weakest(cur)).id)] = b.dataset.swap;
-        renderSetup();
-      };
-    });
-    const sel = $('starterSel'), prev = sel.value;
-    sel.innerHTML = '';
-    [...pitchers].sort((a, b) => (a.pos === 'SP' ? 0 : 1) - (b.pos === 'SP' ? 0 : 1) || a.fatigue - b.fatigue).forEach(p => {
-      const o = document.createElement('option');
-      o.value = p.id; o.textContent = `${p.name} (${p.pos}) OVR ${p.effOvr} · 피로 ${p.fatigue}%`;
-      sel.appendChild(o);
-    });
-    if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
-    $('pitchList').innerHTML = '<ul style="padding-left:18px">' + pitchers.map(p => `<li>${esc(p.name)} (${esc(p.pos)}) · OVR ${p.effOvr} · 피로 ${p.fatigue}%</li>`).join('') + '</ul>';
+    const extra = Object.keys(want).reduce((a, pos) => a + Math.max(0, have(pos) - want[pos]), 0);
+    $('lineupWarn').textContent = lack.length || extra > 1 ? `⚠ 포지션 불균형: ${lack.join(' · ') || '같은 포지션 중복'} — 선수를 눌러 교체하거나 "포지션 맞춰 자동 구성"을 누르세요.` : '✔ 포지션이 맞습니다 (포수·내야 4·외야 3 + 지명타자).';
+    // 클릭: 선택 → 다른 선수 클릭 시 교체
+    const handle = tr => {
+      const id = tr.dataset.id, a = selPlayer;
+      const isH = x => !!hitters.find(p => p.id === x);
+      if (a && a !== id && isH(a) && isH(id)) {
+        const ia = manualLineup.indexOf(a), ib = manualLineup.indexOf(id);
+        if (ia >= 0 && ib >= 0) [manualLineup[ia], manualLineup[ib]] = [manualLineup[ib], manualLineup[ia]];
+        else if (ia >= 0) manualLineup[ia] = id; else if (ib >= 0) manualLineup[ib] = a;
+        selPlayer = id;
+      } else selPlayer = a === id ? null : id;
+      renderSetup();
+    };
+    ['ltLineup', 'ltBench', 'ltPit'].forEach(t => $(t).querySelectorAll('tr[data-id]').forEach(tr => { tr.onclick = () => handle(tr); }));
+    // 우측 선수 상세
+    const p = selPlayer && byId(selPlayer);
+    if (!p) { $('ltDetail').innerHTML = '<div class="hint">좌측 리스트에서<br>선수를 클릭해 주십시오.</div>'; }
+    else {
+      const isP = p.pos === 'SP' || p.pos === 'RP';
+      $('ltDetail').innerHTML = `<div class="ph" style="display:flex;gap:10px;align-items:center"><i class="badge" style="background:${teamColor(league.teamName)}">${esc(badgeText(league.teamName))}</i><div style="min-width:0"><div style="font-weight:800;font-size:16px">${esc(p.name)}</div><div class="muted">${esc(p.pos)} · ${p.age}세</div></div><div style="margin-left:auto;text-align:center;font-weight:800;font-size:22px;line-height:1">${p.effOvr}<small style="display:block;font-size:10px;color:var(--muted)">OVR</small></div></div>` +
+        `<div class="kv" style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin-top:12px"><span class="muted">잠재력</span><b style="text-align:right">${p.potential}</b><span class="muted">시즌</span><b style="text-align:right;font-weight:600">${esc(p.season || '기록 없음')}</b><span class="muted">피로</span><b style="text-align:right">${p.fatigue}%</b><span class="muted">사기</span><b style="text-align:right">${esc(p.mood || '')} ${p.morale ?? ''}</b></div>` + skillHtml(p.pos, p.sub) +
+        (isP ? `<button class="gold" style="width:100%;margin-top:12px" id="btnMakeStarter" ${starterId === p.id ? 'disabled' : ''}>${starterId === p.id ? '현재 선발' : '선발 투수로 지정'}</button>` : '');
+      const mk = $('btnMakeStarter'); if (mk) mk.onclick = () => { starterId = p.id; renderSetup(); };
+    }
   }
   function mkBtn(text, fn) { const b = document.createElement('button'); b.className = 'sm'; b.textContent = text; b.onclick = fn; return b; }
-  $('btnAutoLineup').onclick = () => { manualLineup = null; renderSetup(); };
+  $('btnAutoLineup').onclick = () => { manualLineup = null; selPlayer = null; renderSetup(); };
 
   function startGame(body) {
     try {
@@ -35554,7 +35608,7 @@ function createService(seed) {
       window.scrollTo(0, 0);
     } catch (e) { toast(e.message); }
   }
-  $('btnStart').onclick = () => startGame({ starter: $('starterSel').value, lineup: manualLineup });
+  $('btnStart').onclick = () => startGame({ starter: starterId, lineup: manualLineup });
   $('starPlay').onclick = () => startGame({ kind: 'allstar' });
   $('starAuto').onclick = () => {
     touched = true;
@@ -35654,10 +35708,22 @@ function createService(seed) {
       b.textContent = s.top ? '⚾ 공격 중 — 감독 사인을 낼 수 있습니다' : '⚾ 수비 중 — 구종 사인과 투수 교체가 가능합니다';
     }
     drawField(s);
-    $('myLineup').innerHTML = s.lineup.map(p => `<li class="${p.current ? 'cur' : ''}">${p.current ? '▶ ' : ''}${esc(p.name)} [${esc(p.pos)}] ${p.effOvr}</li>`).join('');
-    $('myPitcher').innerHTML = pitcherHtml(s.myPitcher, 'var(--led)');
-    $('oppPitcher').innerHTML = pitcherHtml(s.oppPitcher, '#f6a49c');
+    $('myLineupT').innerHTML = '<tr><th>#</th><th>선수</th><th>위치</th><th>오늘</th></tr>' +
+      s.lineup.map((p, i) => `<tr class="${p.current ? 'cur' : ''}"><td>${i + 1}</td><td class="n">${esc(p.name)}</td><td>${esc(p.pos)}</td><td>${p.ab}-${p.h}${p.hr ? ` · ${p.hr}HR` : ''}</td></tr>`).join('');
+    $('cardP').innerHTML = cardHtml(s.cardP, 'p', s);
+    $('cardB').innerHTML = cardHtml(s.cardB, 'b', s);
+    $('myPitcher').innerHTML = pitcherHtml(s.myPitcher, 'var(--text)');
     renderOrders(s);
+  }
+  const badgeText = n => (n.match(/^[A-Z]{2,3}/) || [n.charAt(0)])[0];
+  function cardHtml(c, role, s) {            // 투수/타자 카드 (네이버 야구9단 중계 우측 카드 스타일)
+    if (!c) return '';
+    const team = c.side === 'mine' ? s.myName : s.opponent, isP = role === 'p', t = c.today || {};
+    const today = isP ? `${c.inn}이닝 · ${c.pitches}구 · ${c.hits}피안타 · ${c.runs}실점 · ${c.ks}삼진`
+      : `${t.ab || 0}타수 ${t.h || 0}안타` + (t.hr ? ` ${t.hr}홈런` : '') + (t.rbi ? ` ${t.rbi}타점` : '') + (t.bb ? ` ${t.bb}볼넷` : '');
+    return `<span class="role ${role}">${isP ? '⚾ 투수' : '🏏 타자'}</span><div class="ph"><i class="badge" style="background:${teamColor(team)}">${esc(badgeText(team))}</i>` +
+      `<div style="min-width:0"><div class="nm">${esc(c.name)}</div><div class="sub">${esc(team)} · ${esc(c.pos)} · ${c.age}세</div></div><div class="ovr">${c.effOvr}<small>OVR</small></div></div>` +
+      `<div class="kv"><span>시즌</span><b>${esc(c.season || '기록 없음')}</b><span>오늘</span><b>${today}</b><span>${isP ? '체력' : '피로'}</span><b>${isP ? c.hp + '% · 피로 ' + c.fatigue + '%' : c.fatigue + '%'}</b></div>` + skillHtml(c.pos, c.sub);
   }
   function pitcherHtml(p, color) {
     if (!p) return '<span class="muted">-</span>';
@@ -35858,6 +35924,11 @@ function createService(seed) {
     $('resScore').textContent = `${s.myName}  ${s.score.mine} : ${s.score.theirs}  ${s.opponent}`;
     $('resDetail').textContent = `안타 ${s.hits.mine} | ${s.hits.theirs} · ${s.inning > 9 ? '연장 ' : ''}${s.inning}회 종료 · 투구 ${s.pitchTotal}`;
     $('resLinescore').innerHTML = linescoreHtml(s);
+    if (s.summary) {
+      const m = s.summary.mine, o = s.summary.theirs, rows = [['득점', 'r'], ['안타', 'h'], ['홈런', 'hr'], ['도루', 'sb'], ['볼넷', 'bb'], ['삼진', 'k']];
+      $('resChart').innerHTML = `<div class="cmp-head"><span>${esc(s.summary.myName)}</span><span>${esc(s.summary.oppName)}</span></div>` +
+        rows.map(([lb, k]) => { const mx = Math.max(m[k], o[k], 1); return `<div class="cmp"><div class="l"><b>${m[k]}</b><i style="width:${Math.round(m[k] / mx * 100)}%"></i></div><div class="k">${lb}</div><div class="r"><i style="width:${Math.round(o[k] / mx * 100)}%"></i><b>${o[k]}</b></div></div>`; }).join('');
+    }
     $('boxBat').innerHTML = '<tr><th style="text-align:left">타자</th><th>타수</th><th>안타</th><th>홈런</th><th>타점</th><th>득점</th><th>볼넷</th><th>삼진</th></tr>' +
       s.batBox.map(b => `<tr><td class="t">${esc(b.name)} <span class="muted">${esc(b.pos)}</span></td><td>${b.ab}</td><td>${b.h}</td><td>${b.hr}</td><td>${b.rbi}</td><td>${b.r}</td><td>${b.bb}</td><td>${b.k}</td></tr>`).join('');
     const box = list => '<tr><th style="text-align:left">투수</th><th>이닝</th><th>투구</th><th>피안타</th><th>실점</th><th>볼넷</th><th>삼진</th></tr>' +
@@ -35876,11 +35947,31 @@ function createService(seed) {
   $('btnHome').onclick = () => { const k = state && state.kind; state = null; gameId = null; go(k === 'intl' ? 'intl' : 'home'); };
 
   // ── 순위 / 기록 / 훈련 ──
+  let standSub = 'rank', schedPage = 0;
+  function renderSched() {
+    const r = api('GET', '/api/schedule'), PER = 10, pages = Math.ceil(r.rows.length / PER);
+    const todayIdx = r.rows.findIndex(x => x.today);
+    if (schedPage < 0 || schedPage >= pages) schedPage = 0;
+    $('schedPager').innerHTML = Array.from({ length: pages }, (_, i) => `<button data-pg="${i}" class="${i === schedPage ? 'on' : ''}">${i * PER + 1}~${Math.min(r.rows.length, (i + 1) * PER)}</button>`).join('');
+    $('schedPager').querySelectorAll('button').forEach(b => { b.onclick = () => { schedPage = Number(b.dataset.pg); renderSched(); }; });
+    $('schedTable').innerHTML = '<tr><th>일차</th><th>경기결과</th><th>상대</th><th>팀전력</th><th>장소</th></tr>' + r.rows.slice(schedPage * PER, (schedPage + 1) * PER).map(x => x.bye
+      ? `<tr><td>${x.day}</td><td colspan="4" class="muted">휴식일</td></tr>`
+      : `<tr class="${x.today ? 'now' : ''}"><td>${x.day}${r.allStarDay === x.day ? ' ⭐' : ''}</td><td>${x.result ? `<span class="res ${x.result === '승' ? 'w' : 'l'}">${x.result}</span>${esc(x.score)}` : (x.today ? '<b style="color:var(--gold)">오늘</b>' : '<span class="muted">예정</span>')}</td>` +
+        `<td class="opp"><i class="badge sm" style="background:${teamColor(x.opp)}">${esc(badgeText(x.opp))}</i>${esc(shortName(x.opp))}${x.league !== 'KBO' ? lgTag(x.league) : ''}</td><td>${x.strength}</td><td>${x.home ? '홈' : '원정'}</td></tr>`).join('');
+    window.__todayPage = todayIdx < 0 ? 0 : Math.floor(todayIdx / PER);
+  }
+  function renderStandTabs() {
+    $('rankPanel').hidden = standSub !== 'rank'; $('schedPanel').hidden = standSub !== 'sched';
+    document.querySelectorAll('#standTabs button').forEach(b => b.classList.toggle('on', b.dataset.st === standSub));
+    if (standSub === 'sched') renderSched();
+  }
+  document.querySelectorAll('#standTabs button').forEach(b => { b.onclick = () => { standSub = b.dataset.st; if (standSub === 'sched') { renderSched(); schedPage = window.__todayPage || 0; } renderStandTabs(); }; });
   function renderStand() {
     const s = refreshHeader();
     multiLg = s.league === 'ALL' || s.league === 'WORLD';
     $('standTitle').textContent = `📊 ${s.year} ${s.leagueLabel} 팀 순위 (${s.day}/${s.length}일)`;
     $('fullStand').innerHTML = standRows(s.standings);
+    renderStandTabs();
   }
   function renderStats() {
     const st = api('GET', '/api/stats');

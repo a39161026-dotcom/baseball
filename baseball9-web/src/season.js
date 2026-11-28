@@ -141,7 +141,7 @@ function createService(seed) {
       stats: {}, tp: keep && S ? S.tp : 10, recent: [], news: [], done: false, champion: null,
       allStar: { day: length >= 18 ? Math.floor(length / 2) : -1, done: false, result: null },
       intl: S && S.intl || null, voices: carry ? carry.voices : [], trades: carry ? carry.trades : [],
-      draft: null, devReport, offers: [], offerDay: 0, articles: keep && S ? (S.articles || []) : [],
+      draft: null, devReport, offers: [], offerDay: 0, articles: keep && S ? (S.articles || []) : [], history: [],
     };
     prevLeader = null;
     if (!keep) {
@@ -320,7 +320,8 @@ function createService(seed) {
       S.recent = S.recent.slice(-10);
       S.tp += win ? 3 : 2;                       // 훈련 포인트
       userWin = win; userOpp = opp;
-    } else S.tp += 1;                            // 휴식일
+      (S.history = S.history || []).push({ day: S.day, opp: opp.name, home: S.schedule[S.day].some(([a, b]) => a === 0), result: win ? '승' : '패', score: `${gs.mine.score}:${gs.theirs.score}` });
+    } else { S.tp += 1; (S.history = S.history || []).push({ day: S.day, bye: true }); }                            // 휴식일
     const news = [], others = [];
     S.schedule[S.day].forEach(([a, b]) => {
       if (a === 0 || b === 0 || isGhost(a) || isGhost(b)) return;
@@ -414,7 +415,7 @@ function createService(seed) {
     const m = myTeam();
     return {
       teamName: m.name, record: { wins: m.w, losses: m.l },
-      roster: m.roster.map(p => { joinMyTeam(p); return { ...p.toDict(), trainCost: trainCost(p), mood: moodOf(p.morale) }; }),
+      roster: m.roster.map(p => { joinMyTeam(p); const row = p.isPitcher ? pitRow(p) : batRow(p); return { ...p.toDict(), trainCost: trainCost(p), mood: moodOf(p.morale), stat: row || null, season: statLine(p) }; }),
       recent: S.recent.slice(-5), opponents: [], difficulties: Object.entries(DIFFICULTY).map(([id, v]) => ({ id, label: v[1] })),
       tp: S.tp,
     };
@@ -453,7 +454,9 @@ function createService(seed) {
       score: { mine: mine.score, theirs: theirs.score }, hits: { mine: mine.hits, theirs: theirs.hits },
       innings: cols, linescore: { mine: ls(mine, cols), theirs: ls(theirs, cols) },
       pitchTotal: gs.pitchTotal, done: gs.done, difficulty: e.difficulty,
-      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), current: i === curSlot })),
+      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), current: i === curSlot, ab: (e.bat.get(p.id) || {}).ab || 0, h: (e.bat.get(p.id) || {}).h || 0, hr: (e.bat.get(p.id) || {}).hr || 0, rbi: (e.bat.get(p.id) || {}).rbi || 0 })),
+      cardB: batter ? { ...pdict(batter), season: statLine(batter), today: e.bat.get(batter.id) || {}, side: gs.top ? 'mine' : 'theirs' } : null,
+      cardP: gs.defense().pitcher ? { ...pdict(gs.defense().pitcher, gs.defense().currentLine()), season: statLine(gs.defense().pitcher), side: gs.top ? 'theirs' : 'mine' } : null,
       batter: batter ? pdict(batter) : null,
       plate: e.plate, defense: defenseMap(gs.defense()), upNext: upNext(gs.offense(), 3), batterNo: gs.offense().currentSlot + 1,
       myPitcher: mine.pitcher ? pdict(mine.pitcher, mine.currentLine()) : null,
@@ -470,6 +473,11 @@ function createService(seed) {
     if (gs.done && g.kind === 'intl' && S.intl) {
       const last = S.intl.results[S.intl.results.length - 1];
       d.extra = (last ? last.games : []).concat(S.intl.champion ? [`🏆 우승: ${COUNTRY_NAME[S.intl.champion]}`] : []);
+    }
+    if (gs.done) {
+      const side = t => { const ids = new Set(t.roster.map(p => p.id)), o = { r: t.score, h: 0, hr: 0, bb: 0, k: 0, sb: 0 };
+        e.bat.forEach((b, id) => { if (ids.has(id)) { o.h += b.h || 0; o.hr += b.hr || 0; o.bb += b.bb || 0; o.k += b.k || 0; o.sb += b.sb || 0; } }); return o; };
+      d.summary = { mine: side(mine), theirs: side(theirs), myName: mine.name, oppName: theirs.name };
     }
     if (gs.done) {
       d.box = { mine: mine.pitcherLines.map(l => pdict(l.pitcher, l)), theirs: theirs.pitcherLines.map(l => pdict(l.pitcher, l)) };
@@ -578,6 +586,18 @@ function createService(seed) {
       results.push(r);
     }
     return [200, { results, season: seasonView(), stoppedForAllStar }];
+  }
+
+  // 우리 팀 경기 일정 (일차별 상대·장소·결과)
+  function scheduleView() {
+    const hist = new Map((S.history || []).map(h => [h.day, h]));
+    const rows = S.schedule.map((day, d) => {
+      const m = day.find(([a, b]) => a === 0 || b === 0), oppId = m[0] === 0 ? m[1] : m[0], h = hist.get(d);
+      if (isGhost(oppId)) return { day: d + 1, bye: true, done: d < S.day };
+      const opp = team(oppId);
+      return { day: d + 1, opp: opp.name, league: opp.league, home: m[0] === 0, strength: teamStrength(opp), result: h && h.result || null, score: h && h.score || null, done: d < S.day, today: d === S.day && !S.done };
+    });
+    return { rows, allStarDay: S.allStar && S.allStar.day >= 0 ? S.allStar.day + 1 : 0 };
   }
 
   // ── 올스타전 ──
@@ -1177,7 +1197,7 @@ function createService(seed) {
     const pl = Object.values(S.players).map(p => [p.id, p.name, p.pos, p.league, p.age, p.ovr, p.potential, p.salary, p.contract, p.team, p.era, p.fatigue, p.first || 0, p.last || 0, p.most || '',
       p.morale === undefined ? null : p.morale, p.birthYear || 0, p.rookie ? 1 : 0, p.ageSet ? 1 : 0]);
     const teams = S.teams.map(t => ({ id: t.id, name: t.name, user: t.user, group: t.group, league: t.league, w: t.w, l: t.l, rs: t.rs, ra: t.ra, streak: t.streak, roster: t.roster.map(p => p.id) }));
-    return { version: 5, articles: S.articles || [], started: S.started !== false, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null, offers: S.offers || [], offerDay: S.offerDay || 0,
+    return { version: 5, articles: S.articles || [], history: S.history || [], started: S.started !== false, league: S.league, allStar: S.allStar, intl: S.intl, voices: S.voices || [], trades: S.trades || [], draft: S.draft || null, offers: S.offers || [], offerDay: S.offerDay || 0,
       devReport: S.devReport || null, mode: S.mode, year: S.year, length: S.length, difficulty: S.difficulty, day: S.day, tp: S.tp, done: S.done, champion: S.champion,
       recent: S.recent, news: S.news, schedule: S.schedule, stats: S.stats, players: pl, teams };
   }
@@ -1197,7 +1217,7 @@ function createService(seed) {
       if (b) { p.person = at < 0 ? b.person : `${b.person}@${vid.slice(at + 1)}`; p.country = b.country; p.sub = b.sub; if (!p.birthYear) p.birthYear = b.birthYear; } else { p.person = p.id; p.sub = null; }
     });
     const teams = o.teams.map(t => ({ group: '', league: o.league || 'KBO', ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
-    S = { version: 4, articles: o.articles || [], league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
+    S = { version: 4, articles: o.articles || [], history: o.history || [], league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
       voices: o.voices || [], trades: o.trades || [], draft: o.draft && o.draft.pool.every(r => DB_BY_ID.has(r[8] || r[0])) ? o.draft : null,   // 옛 가상 신인 드래프트 저장은 버림
       devReport: o.devReport || null, offers: o.offers || [], offerDay: o.offerDay || 0,
       mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
@@ -1241,6 +1261,7 @@ function createService(seed) {
     else if (key === 'GET api/draft') res = [200, draftView()];
     else if (key === 'POST api/draft/pick') res = draftPick(body);
     else if (key === 'POST api/draft/auto') res = draftAutoAll();
+    else if (key === 'GET api/schedule') res = [200, scheduleView()];
     else if (key === 'GET api/articles') res = [200, { articles: (S.articles || []).slice(0, 40) }];
     else if (key === 'GET api/locker') res = [200, { voices: (S.voices || []).slice().reverse(),
       roster: myTeam().roster.map(p => { joinMyTeam(p); return { name: p.name, pos: p.pos, morale: p.morale, mood: moodOf(p.morale), age: p.age }; })
