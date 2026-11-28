@@ -562,3 +562,22 @@ test('올스타·국가대표: 이번 시즌 잘한 선수가 뽑힘', () => {
   const roster1 = svc.dispatch('GET', '/api/intl').payload.roster;
   assert.ok(roster1.some(r => r.name === hero2.name), '올 시즌 성적이 좋은 선수가 대표팀에 뽑힘');
 });
+
+test('올스타·국가대표도 라인업·선발을 직접 정하고 시작', () => {
+  const svc = createService(92);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18, team: '삼성라이온즈' });
+  svc.dispatch('POST', '/api/season/quick', { days: 9 });
+  for (const kind of ['allstar', 'intl']) {
+    if (kind === 'intl') { svc.dispatch('POST', '/api/allstar/auto', {}); svc.dispatch('POST', '/api/intl/new', { era: 'current', country: 'KOR' }); }
+    const v = svc.dispatch('POST', '/api/setup', { kind }).payload;
+    assert.ok(v.roster.length >= 14 && v.opponent && v.teamName, kind + ' 준비 화면 데이터');
+    const hitters = v.roster.filter(p => p.pos !== 'SP' && p.pos !== 'RP'), sps = v.roster.filter(p => p.pos === 'SP');
+    const lineup = hitters.slice(0, 9).map(p => p.id).reverse();           // 일부러 거꾸로
+    const starter = sps[sps.length - 1].id;                                   // 일부러 마지막 선발
+    const g = svc.dispatch('POST', '/api/game', { kind, lineup, starter });
+    assert.strictEqual(g.status, 200, kind);
+    assert.deepStrictEqual(g.payload.state.lineup.map(p => p.id), lineup, '내가 정한 타순');
+    assert.strictEqual(g.payload.state.myPitcher.id, starter, '내가 정한 선발');
+    svc.dispatch('POST', `/api/game/${g.payload.state.gameId}/advance`, { mode: 'game', ack: true });
+  }
+});

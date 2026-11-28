@@ -488,6 +488,24 @@ function createService(seed) {
   const linesOut = lines => lines.map(([kind, text]) => ({ kind, text }));
 
   // ── 요청 처리 ──
+  // 올스타·국가대표 경기도 일반 경기처럼 라인업·선발을 직접 정할 수 있게: 화면용 선수 행 / 선택한 id 로 구성
+  const setupRows = ps => ps.map(p => ({ ...p.toDict(), mood: p.morale === undefined ? '' : moodOf(p.morale), stat: (p.isPitcher ? pitRow(p) : batRow(p)) || null, season: statLine(p) }));
+  function lineupFrom(team, body) {
+    let lineup = null;
+    if (body.lineup && body.lineup.length === 9) { const l = body.lineup.map(id => team.roster.find(p => p.id === id)); if (l.every(p => p && !p.isPitcher)) lineup = l; }
+    return { lineup, starter: body.starter ? team.roster.find(p => p.id === body.starter && p.isPitcher) || null : null };
+  }
+  function setupView(kind) {
+    if (kind === 'allstar') {
+      if (!allStarDue()) return [409, { error: '지금은 올스타전이 없습니다.' }];
+      const sq = allStarSquads();
+      return [200, { kind, title: '⭐ 올스타전', teamName: sq.mine.name, opponent: sq.theirs.name, roster: setupRows(sq.mine.roster) }];
+    }
+    const I = S.intl, opp = I && I.stage !== 'done' ? intlUserMatch() : null;
+    if (!opp) return [409, { error: '지휘할 국가대표 경기가 없습니다.' }];
+    const t = intlTeamObj(I.mine);
+    return [200, { kind: 'intl', title: `🌏 국가대표 ${intlStageLabel(I)}`, teamName: t.name, opponent: COUNTRY_NAME[opp], roster: setupRows(t.roster) }];
+  }
   function newGame(body) {
     const kind = body.kind || 'season';
     if (kind === 'allstar' || kind === 'intl') {
@@ -495,13 +513,14 @@ function createService(seed) {
       if (kind === 'allstar') {
         if (!allStarDue()) return [409, { error: '지금은 올스타전이 없습니다.' }];
         const sq = allStarSquads();
-        engine = buildGame(sq.mine, sq.theirs);
+        engine = buildGame(sq.mine, sq.theirs, lineupFrom(sq.mine, body));
         title = '⭐ 올스타전';
       } else {
         const I = S.intl;
         const opp = I && I.stage !== 'done' ? intlUserMatch() : null;
         if (!opp) return [409, { error: '지휘할 국가대표 경기가 없습니다.' }];
-        engine = buildGame(intlTeamObj(I.mine), intlTeamObj(opp));
+        const mineT = intlTeamObj(I.mine);
+        engine = buildGame(mineT, intlTeamObj(opp), lineupFrom(mineT, body));
         title = `🌏 국가대표 ${intlStageLabel(I)}`;
       }
       games.clear();
@@ -1261,6 +1280,7 @@ function createService(seed) {
     else if (key === 'GET api/draft') res = [200, draftView()];
     else if (key === 'POST api/draft/pick') res = draftPick(body);
     else if (key === 'POST api/draft/auto') res = draftAutoAll();
+    else if (key === 'POST api/setup') res = setupView(body.kind === 'intl' ? 'intl' : 'allstar');
     else if (key === 'GET api/schedule') res = [200, scheduleView()];
     else if (key === 'GET api/articles') res = [200, { articles: (S.articles || []).slice(0, 40) }];
     else if (key === 'GET api/locker') res = [200, { voices: (S.voices || []).slice().reverse(),
