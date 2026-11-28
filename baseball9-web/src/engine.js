@@ -823,9 +823,22 @@ function positionalLineup(hitters, score = p => p.effOvr) {
   for (let i = 0; i < gaps + 1 && pool.length; i++) take(pool[0]);          // 빈 포지션 + 지명타자
   return lineup.sort((a, b) => score(b) - score(a));
 }
+// 라인업 9명에게 수비 위치(포수·1·2·3루·유격수·좌·중·우익수·지명타자) 배정.
+// 중견수는 주루(발)가 가장 빠른 외야수, 외야수가 4명이면 가장 느린 선수가 지명타자 (예: 발 느린 최형우는 지명타자)
+function assignPositions(lineup) {
+  const out = {}, used = new Set(), spd = p => (p.sub && p.sub.length === 4 ? p.sub[3] : 50);
+  ['C', '1B', '2B', '3B', 'SS'].forEach(pos => { const p = lineup.find(x => x.pos === pos && !used.has(x)); if (p) { out[p.id] = pos; used.add(p); } });
+  const of = lineup.filter(x => x.pos === 'OF' && !used.has(x)).sort((a, b) => spd(b) - spd(a));
+  ['CF', 'LF', 'RF'].forEach(pos => { const p = of.shift(); if (p) { out[p.id] = pos; used.add(p); } });
+  const rest = lineup.filter(x => !used.has(x)).sort((a, b) => b.effOvr - a.effOvr);
+  const open = ['C', '1B', '2B', '3B', 'SS', 'CF', 'LF', 'RF'].filter(pos => !Object.values(out).includes(pos));
+  open.forEach(pos => { const p = rest.pop(); if (p) out[p.id] = pos; });         // 빈 자리는 남은 선수 중 약한 순으로 채움
+  rest.forEach((p, i) => { out[p.id] = 'DH'; });
+  return out;
+}
 const opponentNames = () => [...KBO_TEAMS, ...NPB_TEAMS, ...MLB_TEAMS];
 
 if (typeof module !== 'undefined') {
   module.exports = { GameEngine, GameState, TeamState, Player, MODE, makeRng, C, DIFFICULTY, PITCH_CALLS, POS_LABEL,
-    buildAllPlayers, playerFromRow, clonePlayer, positionalLineup, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
+    buildAllPlayers, playerFromRow, clonePlayer, positionalLineup, assignPositions, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
 }

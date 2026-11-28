@@ -856,6 +856,7 @@
   };
 
   // ── 경기 준비 ──
+  const POS_KO = { C: '포수', '1B': '1루수', '2B': '2루수', '3B': '3루수', SS: '유격수', LF: '좌익수', CF: '중견수', RF: '우익수', DH: '지명타자' };
   let selPlayer = null, starterId = null, setupKind = 'season';
   function openSetup(kind) {                 // 올스타·국가대표 경기도 라인업 관리 화면을 거침
     try { api('POST', '/api/setup', { kind }); } catch (e) { toast(e.message); return; }
@@ -882,8 +883,9 @@
     if (!manualLineup || manualLineup.some(id => !hitters.find(p => p.id === id))) manualLineup = positionalLineup(hitters).map(p => p.id);
     if (!starterId || !pitchers.find(p => p.id === starterId)) starterId = ([...pitchers].sort((a, b) => (a.pos === 'SP' ? 0 : 1) - (b.pos === 'SP' ? 0 : 1) || a.fatigue - b.fatigue)[0] || {}).id;
     const avg = p => p.stat && p.stat.ab ? p.stat.avg.toFixed(3).replace(/^0/, '') : '-';
-    const hRow = (p, i) => `<tr data-id="${esc(p.id)}" class="${selPlayer === p.id ? 'sel' : ''}"><td>${i === null ? '' : i + 1}</td><td class="n">${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''}</td><td>${esc(p.pos)}</td><td>${p.effOvr}</td><td>${fatIcon(p.fatigue)} ${p.fatigue}%</td><td>${avg(p)}</td><td>${p.stat ? p.stat.hr : 0}</td><td>${p.stat ? p.stat.rbi : 0}</td><td>${p.stat ? p.stat.sb : 0}</td></tr>`;
-    const hHead = '<tr><th>타순</th><th>이름</th><th>위치</th><th>OVR</th><th>상태</th><th>타율</th><th>홈런</th><th>타점</th><th>도루</th></tr>';
+    const slots = assignPositions(manualLineup.map(byId));
+    const hRow = (p, i) => `<tr data-id="${esc(p.id)}" class="${selPlayer === p.id ? 'sel' : ''}"><td>${i === null ? '' : i + 1}</td><td class="n">${esc(p.name)}${p.league !== 'KBO' ? lgTag(p.league) : ''}</td><td>${i === null ? esc(p.pos) : (POS_KO[slots[p.id]] || esc(p.pos))}</td><td>${p.effOvr}</td><td>${fatIcon(p.fatigue)} ${p.fatigue}%</td><td>${avg(p)}</td><td>${p.stat ? p.stat.hr : 0}</td><td>${p.stat ? p.stat.rbi : 0}</td><td>${p.stat ? p.stat.sb : 0}</td></tr>`;
+    const hHead = '<tr><th>타순</th><th>이름</th><th>수비</th><th>OVR</th><th>상태</th><th>타율</th><th>홈런</th><th>타점</th><th>도루</th></tr>';
     $('ltLineup').innerHTML = hHead + manualLineup.map((id, i) => hRow(byId(id), i)).join('');
     const inLineup = new Set(manualLineup), bench = hitters.filter(p => !inLineup.has(p.id));
     $('ltBench').innerHTML = hHead.replace('<th>타순</th>', '<th></th>') + (bench.length ? bench.map(p => hRow(p, null)).join('') : '<tr><td colspan="9" class="muted">벤치 없음</td></tr>');
@@ -917,6 +919,17 @@
         `<div class="kv" style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin-top:12px"><span class="muted">잠재력</span><b style="text-align:right">${p.potential}</b><span class="muted">시즌</span><b style="text-align:right;font-weight:600">${esc(p.season || '기록 없음')}</b><span class="muted">피로</span><b style="text-align:right">${p.fatigue}%</b><span class="muted">사기</span><b style="text-align:right">${esc(p.mood || '')} ${p.morale ?? ''}</b></div>` + skillHtml(p.pos, p.sub) +
         (isP ? `<button class="gold" style="width:100%;margin-top:12px" id="btnMakeStarter" ${starterId === p.id ? 'disabled' : ''}>${starterId === p.id ? '현재 선발' : '선발 투수로 지정'}</button>` : '');
       const mk = $('btnMakeStarter'); if (mk) mk.onclick = () => { starterId = p.id; renderSetup(); };
+      if (setupKind === 'season') {                // 방출 (한 번 더 눌러 확정)
+        const rel = document.createElement('button');
+        rel.className = 'sm'; rel.style.cssText = 'width:100%;margin-top:8px'; rel.textContent = '🗑 방출';
+        rel.onclick = () => {
+          if (!rel.dataset.armed) { rel.dataset.armed = '1'; rel.textContent = '정말 방출할까요? 한 번 더 누르세요'; rel.className = 'sm stop'; setTimeout(() => { if (rel.isConnected) { delete rel.dataset.armed; rel.textContent = '🗑 방출'; rel.className = 'sm'; } }, 3500); return; }
+          touched = true;
+          try { const r = api('POST', '/api/release', { id: p.id }); toast(`${r.released} 선수를 방출했습니다`); save(); selPlayer = null; manualLineup = null; } catch (e) { toast(e.message); }
+          renderSetup();
+        };
+        $('ltDetail').appendChild(rel);
+      }
     }
   }
   function mkBtn(text, fn) { const b = document.createElement('button'); b.className = 'sm'; b.textContent = text; b.onclick = fn; return b; }
@@ -1038,7 +1051,7 @@
     }
     drawField(s);
     $('myLineupT').innerHTML = '<tr><th>#</th><th>선수</th><th>위치</th><th>오늘</th></tr>' +
-      s.lineup.map((p, i) => `<tr class="${p.current ? 'cur' : ''}"><td>${i + 1}</td><td class="n">${esc(p.name)}</td><td>${esc(p.pos)}</td><td>${p.ab}-${p.h}${p.hr ? ` · ${p.hr}HR` : ''}</td></tr>`).join('');
+      s.lineup.map((p, i) => `<tr class="${p.current ? 'cur' : ''}"><td>${i + 1}</td><td class="n">${esc(p.name)}</td><td>${POS_KO[p.slot] || esc(p.pos)}</td><td>${p.ab}-${p.h}${p.hr ? ` · ${p.hr}HR` : ''}</td></tr>`).join('');
     $('cardP').innerHTML = cardHtml(s.cardP, 'p', s);
     $('cardB').innerHTML = cardHtml(s.cardB, 'b', s);
     $('myPitcher').innerHTML = pitcherHtml(s.myPitcher, 'var(--text)');

@@ -581,3 +581,15 @@ test('올스타·국가대표도 라인업·선발을 직접 정하고 시작', 
     svc.dispatch('POST', `/api/game/${g.payload.state.gameId}/advance`, { mode: 'game', ack: true });
   }
 });
+
+test('수비 위치 배정: 발 빠른 외야수가 중견수, 발 느린 외야수는 지명타자', () => {
+  const { assignPositions } = require('./load');
+  const mk = (n, pos, ovr, spd) => { const p = new Player(n, pos, 'KBO', 30, ovr, ovr, 0, 1, '', 2026); p.sub = [70, 70, 70, spd]; p.id = n; return p; };
+  const lu = [mk('최형우', 'OF', 88, 40), mk('구자욱', 'OF', 85, 80), mk('김성윤', 'OF', 73, 60), mk('박승규', 'OF', 68, 55),
+    mk('C', 'C', 70, 50), mk('1B', '1B', 70, 50), mk('2B', '2B', 70, 50), mk('SS', 'SS', 70, 50), mk('3B', '3B', 70, 50)];
+  const a = assignPositions(lu);
+  assert.strictEqual(a['구자욱'], 'CF', '발 빠른 구자욱이 중견수');
+  assert.strictEqual(a['최형우'], 'DH', '발 느린 최형우는 지명타자');
+  assert.strictEqual(Object.values(a).filter(x => x === 'DH').length, 1);
+  assert.strictEqual(new Set(Object.values(a)).size, 9, '9개 자리가 모두 다름');
+});

@@ -431,13 +431,8 @@ function createService(seed) {
   const ls = (t, cols) => [...t.runsByInning, ...Array(cols - t.runsByInning.length).fill(null)];
   // 수비 위치별 선수 이름 (경기 화면 '주루보기'용)
   function defenseMap(t) {
-    const m = { P: t.pitcher ? t.pitcher.name : '' }, used = new Set();
-    const lineup = t.lineup.filter(p => !p.isPitcher), cor = ['C', '1B', '2B', '3B', 'SS'];
-    cor.forEach(pos => { const p = lineup.find(x => x.pos === pos && !used.has(x)); if (p) { used.add(p); m[pos] = p.name; } });
-    const of = lineup.filter(x => x.pos === 'OF');
-    ['LF', 'CF', 'RF'].forEach(pos => { const p = of.shift(); if (p) { used.add(p); m[pos] = p.name; } });
-    const rest = lineup.filter(x => !used.has(x));
-    [...cor, 'LF', 'CF', 'RF'].forEach(pos => { if (!m[pos] && rest.length) m[pos] = rest.shift().name; });
+    const m = { P: t.pitcher ? t.pitcher.name : '' }, slots = assignPositions(t.lineup.filter(p => !p.isPitcher));
+    t.lineup.forEach(p => { if (slots[p.id] && slots[p.id] !== 'DH') m[slots[p.id]] = p.name; });
     return m;
   }
   const upNext = (t, n) => t.lineup.length ? [1, 2, 3].slice(0, n).map(k => ({ no: (t.currentSlot + k) % t.lineup.length + 1, name: t.lineup[(t.currentSlot + k) % t.lineup.length].name })) : [];
@@ -454,7 +449,7 @@ function createService(seed) {
       score: { mine: mine.score, theirs: theirs.score }, hits: { mine: mine.hits, theirs: theirs.hits },
       innings: cols, linescore: { mine: ls(mine, cols), theirs: ls(theirs, cols) },
       pitchTotal: gs.pitchTotal, done: gs.done, difficulty: e.difficulty,
-      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), current: i === curSlot, ab: (e.bat.get(p.id) || {}).ab || 0, h: (e.bat.get(p.id) || {}).h || 0, hr: (e.bat.get(p.id) || {}).hr || 0, rbi: (e.bat.get(p.id) || {}).rbi || 0 })),
+      lineup: mine.lineup.map((p, i) => ({ ...pdict(p), slot: assignPositions(mine.lineup)[p.id] || p.pos, current: i === curSlot, ab: (e.bat.get(p.id) || {}).ab || 0, h: (e.bat.get(p.id) || {}).h || 0, hr: (e.bat.get(p.id) || {}).hr || 0, rbi: (e.bat.get(p.id) || {}).rbi || 0 })),
       cardB: batter ? { ...pdict(batter), season: statLine(batter), today: e.bat.get(batter.id) || {}, side: gs.top ? 'mine' : 'theirs' } : null,
       cardP: gs.defense().pitcher ? { ...pdict(gs.defense().pitcher, gs.defense().currentLine()), season: statLine(gs.defense().pitcher), side: gs.top ? 'theirs' : 'mine' } : null,
       batter: batter ? pdict(batter) : null,
