@@ -309,6 +309,7 @@
       <div class="grid2">
         <div>
           <p class="lbl">타순 (▲▼로 순서 변경)</p>
+          <p class="muted" id="lineupWarn" style="margin:0 0 6px"></p>
           <ol id="lineupEdit" style="padding-left:20px"></ol>
           <p class="lbl" style="margin-top:12px">벤치 (대타·대주자 후보)</p>
           <div id="benchList" class="side"></div>
@@ -322,7 +323,7 @@
       </div>
       <div class="row" style="margin-top:12px">
         <button class="gold" id="btnStart">▶ 경기 시작</button>
-        <button id="btnAutoLineup">타순 자동</button>
+        <button id="btnAutoLineup">포지션 맞춰 자동 구성</button>
       </div>
     </div>
   </section>
@@ -751,7 +752,7 @@
     const hitters = league.roster.filter(p => p.pos !== 'SP' && p.pos !== 'RP');
     const pitchers = league.roster.filter(p => p.pos === 'SP' || p.pos === 'RP');
     if (!manualLineup || manualLineup.some(id => !hitters.find(p => p.id === id))) {
-      manualLineup = [...hitters].sort((a, b) => b.effOvr - a.effOvr).slice(0, 9).map(p => p.id);
+      manualLineup = positionalLineup(hitters).map(p => p.id);
     }
     const ol = $('lineupEdit');
     ol.innerHTML = '';
@@ -767,6 +768,11 @@
       li.querySelector('.mv').append(up, dn);
       ol.appendChild(li);
     });
+    const labels = { C: '포수', '1B': '1루수', '2B': '2루수', '3B': '3루수', SS: '유격수', OF: '외야수' }, want = { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3 };
+    const have = pos => manualLineup.filter(id => hitters.find(x => x.id === id).pos === pos).length;
+    const lack = Object.keys(want).filter(pos => have(pos) < want[pos]).map(pos => have(pos) === 0 ? `${labels[pos]} 없음` : `${labels[pos]} ${have(pos)}/${want[pos]}명`);
+    const extra = Object.keys(want).reduce((a, pos) => a + Math.max(0, have(pos) - want[pos]), 0);        // 남는 1명은 지명타자
+    $('lineupWarn').textContent = lack.length || extra > 1 ? `⚠ 포지션 불균형: ${lack.join(' · ') || '같은 포지션 중복'} — 벤치 선수를 넣거나 "포지션 맞춰 자동 구성"을 누르세요.` : '✔ 포지션이 맞습니다 (포수·내야 4·외야 3 + 지명타자).';
     const inLineup = new Set(manualLineup);
     const bench = hitters.filter(p => !inLineup.has(p.id));
     $('benchList').innerHTML = bench.length
@@ -774,8 +780,15 @@
       : '<span class="muted">벤치 없음</span>';
     $('benchList').querySelectorAll('[data-swap]').forEach(b => {
       b.onclick = () => {   // 벤치 선수를 타순에서 OVR 가장 낮은 선수와 교체
-        const low = manualLineup.map(id => hitters.find(x => x.id === id)).sort((a, c) => a.effOvr - c.effOvr)[0];
-        manualLineup[manualLineup.indexOf(low.id)] = b.dataset.swap;
+        const inc = hitters.find(x => x.id === b.dataset.swap);
+        const cur = manualLineup.map(id => hitters.find(x => x.id === id));
+        const need = { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3 }, cnt = pos => cur.filter(x => x.pos === pos).length;
+        const weakest = arr => [...arr].sort((a, c) => a.effOvr - c.effOvr)[0];
+        let low;
+        if (!need[inc.pos]) low = weakest(cur);                                                // 지명타자형 → 가장 약한 선수
+        else if (cnt(inc.pos) >= need[inc.pos]) low = weakest(cur.filter(x => x.pos === inc.pos));  // 같은 포지션끼리 교체
+        else low = weakest(cur.filter(x => cnt(x.pos) > (need[x.pos] || 0)).concat([])) || weakest(cur);   // 비는 포지션 → 남는 포지션 선수와 교체
+        manualLineup[manualLineup.indexOf((low || weakest(cur)).id)] = b.dataset.swap;
         renderSetup();
       };
     });

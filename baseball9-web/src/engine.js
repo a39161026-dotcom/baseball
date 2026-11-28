@@ -812,9 +812,19 @@ function applyPostGameFatigue(team, rng) {
   });
 }
 
+// 포지션을 맞춘 9인 라인업: 포수·1루·2루·3루·유격수·외야 3명 + 지명타자(남은 최고 타자). 모자란 포지션은 남은 선수 중 가장 나은 선수로 채움.
+// 타순은 점수(기본: 현재 능력치) 높은 순
+function positionalLineup(hitters, score = p => p.effOvr) {
+  const pool = [...hitters].sort((a, b) => score(b) - score(a)), lineup = [];
+  const take = p => { lineup.push(p); pool.splice(pool.indexOf(p), 1); };
+  let gaps = 0;
+  ['C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF'].forEach(pos => { const p = pool.find(x => x.pos === pos); if (p) take(p); else gaps++; });
+  for (let i = 0; i < gaps + 1 && pool.length; i++) take(pool[0]);          // 빈 포지션 + 지명타자
+  return lineup.sort((a, b) => score(b) - score(a));
+}
 const opponentNames = () => [...KBO_TEAMS, ...NPB_TEAMS, ...MLB_TEAMS];
 
 if (typeof module !== 'undefined') {
   module.exports = { GameEngine, GameState, TeamState, Player, MODE, makeRng, C, DIFFICULTY, PITCH_CALLS, POS_LABEL,
-    buildAllPlayers, playerFromRow, clonePlayer, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
+    buildAllPlayers, playerFromRow, clonePlayer, positionalLineup, buildAutoRoster, updateDailyCondition, applyPostGameFatigue, newId };
 }

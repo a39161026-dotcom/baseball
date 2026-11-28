@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { createService, GameEngine, GameState, Player, MODE } = require('./load');
+const { createService, GameEngine, GameState, Player, MODE, positionalLineup } = require('./load');
 
 const mk = (n, pos, ovr) => new Player(n, pos, '국내', 27, ovr, ovr, 1, 1, 'T', 2024);
 function newGame(ovr = 75, seed = 1) {
@@ -483,4 +483,19 @@ test('연도 선택: 1982~2026 그 해 실제 로스터, 홀수 구단 연도는
   const svc2 = createService(1);
   assert.ok(svc2.importState(JSON.parse(JSON.stringify(svc.exportState()))));
   assert.strictEqual(svc2.dispatch('GET', '/api/season').payload.year, 1987);
+});
+
+test('라인업: 능력치 순이 아니라 포지션을 맞춰 구성 (외야 4명·2루수 없음 방지)', () => {
+  const mk = (n, pos, ovr) => new Player(n, pos, 'KBO', 27, ovr, ovr, 0, 1, '', 2026);
+  const hit = [mk('OF1', 'OF', 90), mk('OF2', 'OF', 88), mk('OF3', 'OF', 86), mk('OF4', 'OF', 84), mk('OF5', 'OF', 82),
+    mk('C1', 'C', 70), mk('B1', '1B', 72), mk('S1', 'SS', 71), mk('T1', '3B', 69), mk('K2', '2B', 55)];
+  const lu = positionalLineup(hit);
+  assert.strictEqual(lu.length, 9);
+  assert.ok(lu.some(p => p.pos === '2B'), '약해도 2루수가 라인업에 들어감');
+  assert.strictEqual(lu.filter(p => p.pos === 'OF').length, 4, '외야 3명 + 지명타자(남은 최고 타자 OF4)');
+  assert.ok(lu.some(p => p.name === 'OF4'), '지명타자는 남은 최고 타자(OF4)');
+  assert.strictEqual(lu[0].name, 'OF1', '타순은 능력치 순');
+  // 2루수가 없으면 빈 자리는 남은 최고 타자로 채움
+  const lu2 = positionalLineup(hit.filter(p => p.pos !== '2B'));
+  assert.strictEqual(lu2.length, 9);
 });

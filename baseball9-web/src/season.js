@@ -182,7 +182,7 @@ function createService(seed) {
 
   // ── 라인업/선발 ──
   const hitters = t => t.roster.filter(p => !p.isPitcher);
-  const autoLineup = t => [...hitters(t)].sort((a, b) => b.effOvr - a.effOvr).slice(0, 9);
+  const autoLineup = t => positionalLineup(hitters(t));            // 포지션을 맞춘 라인업
   function pickStarter(t) {
     const sps = t.roster.filter(p => p.pos === 'SP').sort((a, b) => a.fatigue - b.fatigue);
     if (sps.length && sps[0].fatigue <= 55) return sps[0];
