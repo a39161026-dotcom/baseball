@@ -8,7 +8,6 @@ const FIRST_MAX = 28;            // 1군 정원 (나머지는 2군)            /
 const LEAGUE_KEYS = ['KBO', 'NPB', 'MLB', 'WORLD', 'ALL'];
 const LEAGUE_LABEL = { KBO: 'KBO', NPB: 'NPB', MLB: 'MLB', WORLD: '월드', ALL: '통합' };
 // 국가대표 대회 (WBC 방식): 8개국, 2개 조
-const INTL_GROUPS = { A: ['KOR', 'JPN', 'CUB', 'MEX'], B: ['USA', 'DOM', 'VEN', 'PUR'] };
 const pk = p => p.person || p.id;           // 동일인 키
 
 function createService(seed) {
@@ -677,33 +676,62 @@ function createService(seed) {
     recordAllStar(e);
   }
 
-  // ── 국가대표 대회 (조별리그 → 4강 → 결승) ──
-  const RR = [[[0, 1], [2, 3]], [[0, 2], [1, 3]], [[0, 3], [1, 2]]];
+  // ── 국가대표 대회: 선수가 충분한 모든 나라가 참가 (조별리그 → 8강 → 4강 → 결승) ──
+  const INTL_WINDOW = 5;                       // 현역 대표: 최근 6시즌 안에 뛴 선수
+  const GROUP_LETTERS = 'ABCD';
+  const inEraNation = (p, era) => era === 'legend' ? true : S.mode === 'year' ? p.first <= S.year && p.last >= S.year : p.last >= LEAGUES[p.league].last - INTL_WINDOW;
   function buildNation(code, era) {
-    const inEra = p => era === 'legend' ? true : S.mode === 'year' ? p.first <= S.year && p.last >= S.year : p.last >= LEAGUES[p.league].last - 2;     // 연도 선택 모드: 그 해 현역
-    const cands = DB.filter(p => p.country === code && inEra(p));
+    const cands = DB.filter(p => p.country === code && inEraNation(p, era));
     const score = era === 'legend' ? (p => p.ovr) : fanScore;          // 현역 대표: 이번 시즌 기록 순 (기록이 없는 선수는 능력치로 뒤에서 채움). 역대 드림팀은 통산 능력치
     const best = new Map();                 // 동일인은 가장 높은 점수 한 명
     cands.forEach(p => { const k = pk(p); if (!best.has(k) || score(best.get(k)) < score(p)) best.set(k, p); });
     return pickRoster([...best.values()], new Set(), score).map(p => p.id);
   }
+  // 선수 명단을 꾸릴 수 있는(야수 9·투수 5 이상) 나라 목록
+  function intlEligible(era) {
+    const cnt = {};
+    DB.forEach(p => { if (p.country && COUNTRY_NAME[p.country] && inEraNation(p, era)) { const c = cnt[p.country] = cnt[p.country] || { h: 0, p: 0 }; p.isPitcher ? c.p++ : c.h++; } });
+    return Object.keys(cnt).filter(c => cnt[c].h >= 9 && cnt[c].p >= 5);
+  }
+  function roundRobin(codes) {                 // 조 안 풀리그: 3라운드 (3팀 조는 라운드마다 한 팀이 쉼)
+    const n = codes.length, arr = n % 2 ? [...codes, null] : [...codes], rounds = [];
+    for (let r = 0; r < arr.length - 1; r++) {
+      const m = [];
+      for (let i = 0; i < arr.length / 2; i++) { const x = arr[i], y = arr[arr.length - 1 - i]; if (x && y) m.push([x, y]); }
+      rounds.push(m);
+      arr.splice(1, 0, arr.pop());
+    }
+    while (rounds.length < 3) rounds.push([]);
+    return rounds;
+  }
   function newIntl({ era = 'current', country = 'KOR' } = {}) {
-    const codes = [...INTL_GROUPS.A, ...INTL_GROUPS.B];
-    if (!codes.includes(country)) country = 'KOR';
     const teams = {};
-    codes.forEach(c => { teams[c] = { code: c, name: COUNTRY_NAME[c], ids: buildNation(c, era), w: 0, l: 0, rs: 0, ra: 0, sp: 0 }; });
-    S.intl = { era, mine: country, teams, stage: 'group', round: 0, semis: null, final: null, results: [], champion: null };
+    intlEligible(era).forEach(c => {
+      const ids = buildNation(c, era);
+      const pl = ids.map(id => DB_BY_ID.get(id)).filter(Boolean);
+      if (pl.filter(p => !p.isPitcher).length < 9 || pl.filter(p => p.isPitcher).length < 5) return;
+      teams[c] = { code: c, name: COUNTRY_NAME[c], ids, w: 0, l: 0, rs: 0, ra: 0, sp: 0, power: pl.reduce((a, p) => a + p.ovr, 0) / pl.length };
+    });
+    const codes = Object.keys(teams).sort((a, b) => teams[b].power - teams[a].power);
+    if (!teams[country]) country = teams.KOR ? 'KOR' : codes[0];
+    const G = Math.max(2, Math.min(4, Math.ceil(codes.length / 4)));
+    const groups = {};
+    for (let g = 0; g < G; g++) groups[GROUP_LETTERS[g]] = [];
+    codes.forEach((c, k) => { const row = Math.floor(k / G), g = row % 2 === 0 ? k % G : G - 1 - (k % G); groups[GROUP_LETTERS[g]].push(c); });      // 전력순 뱀 배치
+    const rounds = [0, 1, 2].map(r => Object.keys(groups).flatMap(g => roundRobin(groups[g])[r]));
+    S.intl = { era, mine: country, teams, groups, rounds, stage: 'group', round: 0, qf: null, semis: null, final: null, results: [], champion: null };
     dirty = true;
   }
   function intlMatches() {
     const I = S.intl;
     if (!I) return [];
-    if (I.stage === 'group') return ['A', 'B'].flatMap(g => RR[I.round].map(([i, j]) => [INTL_GROUPS[g][i], INTL_GROUPS[g][j]]));
+    if (I.stage === 'group') return I.rounds[I.round] || [];
+    if (I.stage === 'quarter') return I.qf;
     if (I.stage === 'semi') return I.semis;
     if (I.stage === 'final') return [I.final];
     return [];
   }
-  const intlStageLabel = I => I.stage === 'group' ? `조별리그 ${I.round + 1}차전` : I.stage === 'semi' ? '4강' : I.stage === 'final' ? '결승' : '대회 종료';
+  const intlStageLabel = I => I.stage === 'group' ? `조별리그 ${I.round + 1}차전` : I.stage === 'quarter' ? '8강' : I.stage === 'semi' ? '4강' : I.stage === 'final' ? '결승' : '대회 종료';
   function intlTeamObj(code) {
     const t = S.intl.teams[code];
     const roster = t.ids.map(id => DB_BY_ID.get(id)).filter(Boolean).map(clonePlayer);
@@ -716,10 +744,17 @@ function createService(seed) {
     const m = intlMatches().find(([a, b]) => a === I.mine || b === I.mine);
     return m ? (m[0] === I.mine ? m[1] : m[0]) : null;
   }
+  const intlCmp = (a, b) => b.w - a.w || (b.rs - b.ra) - (a.rs - a.ra) || b.rs - a.rs;
   function intlGroupTable(g) {
-    return INTL_GROUPS[g].map(c => S.intl.teams[c])
+    return S.intl.groups[g].map(c => S.intl.teams[c])
       .map(t => ({ code: t.code, name: t.name, w: t.w, l: t.l, rs: t.rs, ra: t.ra, mine: t.code === S.intl.mine }))
-      .sort((a, b) => b.w - a.w || (b.rs - b.ra) - (a.rs - a.ra) || b.rs - a.rs);
+      .sort(intlCmp);
+  }
+  function intlQualifiers() {                  // 조 순위 → 8강(또는 4강) 진출팀을 시드 순으로
+    const I = S.intl, K = Object.keys(I.groups).length >= 3 ? 8 : 4;
+    const rows = [];
+    Object.keys(I.groups).forEach(g => intlGroupTable(g).forEach((t, rank) => rows.push({ ...t, rank })));
+    return rows.sort((a, b) => a.rank - b.rank || intlCmp(a, b)).slice(0, K).map(t => t.code);
   }
   // 이번 라운드 경기를 모두 치르고 다음 단계로 (userEngine 이 있으면 그 경기 결과를 사용)
   function intlFinishRound(userEngine) {
@@ -739,33 +774,42 @@ function createService(seed) {
     if (I.stage === 'group') {
       I.round++;
       if (I.round >= 3) {
-        const A = intlGroupTable('A'), B = intlGroupTable('B');
-        I.semis = [[A[0].code, B[1].code], [B[0].code, A[1].code]];
-        I.stage = 'semi';
+        const q = intlQualifiers();
+        if (q.length === 8) { I.qf = [[q[0], q[7]], [q[3], q[4]], [q[1], q[6]], [q[2], q[5]]]; I.stage = 'quarter'; }
+        else { I.semis = [[q[0], q[3]], [q[1], q[2]]]; I.stage = 'semi'; }
       }
+    } else if (I.stage === 'quarter') {
+      I.semis = [[winners[0], winners[1]], [winners[2], winners[3]]];
+      I.stage = 'semi';
     } else if (I.stage === 'semi') {
       I.final = winners;
       I.stage = 'final';
     } else if (I.stage === 'final') {
       I.champion = winners[0];
       I.stage = 'done';
+      pushArticle({ tag: '국가대표', title: `${COUNTRY_NAME[I.champion]}, 국가대표 대회 우승`, sub: `${Object.keys(I.teams).length}개국 참가`, body: `${Object.keys(I.teams).length}개국이 겨룬 국가대표 대회에서 ${COUNTRY_NAME[I.champion]}${hasBatchim(COUNTRY_NAME[I.champion]) ? '이' : '가'} 우승했다. 우리 대표팀은 ${COUNTRY_NAME[I.mine]}.` });
     }
     dirty = true;
   }
+  const intlCountryList = era => { const list = intlEligible(era).map(c => ({ code: c, name: COUNTRY_NAME[c] })); return list.sort((a, b) => a.name.localeCompare(b.name, 'ko')); };
   function intlView() {
     const I = S.intl;
-    if (!I) return { active: false, countries: [...INTL_GROUPS.A, ...INTL_GROUPS.B].map(c => ({ code: c, name: COUNTRY_NAME[c] })) };
+    const byEra = { current: intlCountryList('current'), legend: intlCountryList('legend') };
+    if (!I) return { active: false, countries: byEra.current, countriesByEra: byEra };
     const opp = I.stage === 'done' ? null : intlUserMatch();
     const roster = I.teams[I.mine].ids.map(id => DB_BY_ID.get(id)).filter(Boolean)
       .map(p => ({ name: p.name, pos: p.pos, ovr: p.ovr, league: p.league, team: p.team, stat: statLine(p), score: I.era === 'legend' || perfScore(p) === null ? null : Math.round(perfScore(p) * 10) / 10 }));
+    const names = m => m.map(c => COUNTRY_NAME[c]);
+    const groups = {};
+    Object.keys(I.groups).forEach(g => { groups[g] = intlGroupTable(g); });
     return {
-      active: true, era: I.era, mine: I.mine, mineName: COUNTRY_NAME[I.mine], stage: I.stage, stageLabel: intlStageLabel(I),
-      groups: { A: intlGroupTable('A'), B: intlGroupTable('B') },
-      semis: I.semis && I.semis.map(m => m.map(c => COUNTRY_NAME[c])), final: I.final && I.final.map(c => COUNTRY_NAME[c]),
+      active: true, era: I.era, mine: I.mine, mineName: COUNTRY_NAME[I.mine], stage: I.stage, stageLabel: intlStageLabel(I), teamCount: Object.keys(I.teams).length,
+      groups, quarters: I.qf && I.qf.map(names),
+      semis: I.semis && I.semis.map(names), final: I.final && names(I.final),
       champion: I.champion && COUNTRY_NAME[I.champion], results: I.results.slice().reverse(),
       next: opp ? { opponent: COUNTRY_NAME[opp], label: intlStageLabel(I) } : null,
-      eliminated: I.stage !== 'done' && !opp, roster,
-      countries: [...INTL_GROUPS.A, ...INTL_GROUPS.B].map(c => ({ code: c, name: COUNTRY_NAME[c] })),
+      bye: I.stage === 'group' && !opp, eliminated: I.stage !== 'done' && I.stage !== 'group' && !opp, roster,
+      countries: byEra[I.era], countriesByEra: byEra,
     };
   }
   function intlQuick() {
@@ -1335,7 +1379,7 @@ function createService(seed) {
       if (b) { p.person = at < 0 ? b.person : `${b.person}@${vid.slice(at + 1)}`; p.country = b.country; p.sub = b.sub; if (!p.birthYear) p.birthYear = b.birthYear; } else { p.person = p.id; p.sub = null; }
     });
     const teams = o.teams.map(t => ({ group: '', league: o.league || 'KBO', ...t, roster: t.roster.map(id => players[id]).filter(Boolean) }));
-    S = { version: 4, articles: o.articles || [], history: o.history || [], retired: o.retired || [], league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl || null,
+    S = { version: 4, articles: o.articles || [], history: o.history || [], retired: o.retired || [], league: o.league || 'KBO', allStar: o.allStar || { day: -1, done: true, result: null }, intl: o.intl && o.intl.groups ? o.intl : null,
       voices: o.voices || [], trades: o.trades || [], draft: o.draft && o.draft.pool.every(r => DB_BY_ID.has(r[8] || r[0])) ? o.draft : null,   // 옛 가상 신인 드래프트 저장은 버림
       devReport: o.devReport || null, offers: o.offers || [], offerDay: o.offerDay || 0,
       mode: o.mode || 'current', year: o.year, length: o.length, difficulty: o.difficulty, day: o.day, tp: o.tp, done: o.done, champion: o.champion,
