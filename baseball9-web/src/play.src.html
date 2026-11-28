@@ -259,6 +259,7 @@
     <div class="panel star" id="starPanel" hidden>
       <p class="title">⭐ 올스타전</p>
       <p id="starText" style="margin:0 0 10px"></p>
+      <details id="starSquads" hidden style="margin-bottom:10px"><summary class="lbl">🌟 선발된 올스타 명단 (능력치 + 올 시즌 성적)</summary><div id="starSquadList" class="side"></div></details>
       <div class="controls" id="starBtns"><div class="group">
         <button class="gold" id="starPlay">⭐ 올스타전 지휘하기</button>
         <button id="starAuto">⏩ 자동으로 치르기</button>
@@ -631,6 +632,12 @@
     $('champPanel').hidden = !s.done;
     const as = s.allStar || {};
     $('starPanel').hidden = !(as.due || as.done);
+    $('starSquads').hidden = !as.due;
+    if (as.due) {
+      const sq = api('GET', '/api/allstar/squads');
+      const list = t => `<div style="margin-top:8px"><b>${esc(t.name)}</b></div><ul style="padding-left:18px">` + t.roster.map(p => `<li>${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)}${p.team ? ' · ' + esc(p.team) : ''} · OVR ${p.ovr}${p.stat ? ' · ' + esc(p.stat) : ''}</span></li>`).join('') + '</ul>';
+      $('starSquadList').innerHTML = list(sq.mine) + list(sq.theirs);
+    }
     $('starBtns').hidden = !as.due;
     ['goPlay', 'quick1', 'quick7'].forEach(id => { $(id).disabled = !!as.due; });   // 올스타 휴식기에는 정규시즌 잠시 멈춤
     $('starText').textContent = as.due ? '시즌 중반! 팬 투표(능력치+시즌 성적)로 뽑힌 올스타전이 열립니다. 우리 팀 선수가 속한 쪽을 지휘합니다. 이기면 훈련 포인트 3.'
@@ -1285,7 +1292,8 @@
       ? v.results.map(r => `<div style="margin-bottom:6px"><b style="color:var(--gold)">${esc(r.stage)}</b>${r.games.map(g => `<div class="newsline">${esc(g)}</div>`).join('')}</div>`).join('')
       : '아직 경기가 없습니다.';
     $('intlRosterTitle').textContent = `${v.mineName} 대표 명단 (${v.roster.length}명)`;
-    $('intlRoster').innerHTML = '<ul style="padding-left:18px">' + v.roster.map(p => `<li>${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)} · OVR ${p.ovr}</span></li>`).join('') + '</ul>';
+    $('intlRoster').innerHTML = '<ul style="padding-left:18px">' + v.roster.map(p => `<li>${esc(p.name)}${lgTag(p.league)} <span class="muted">${esc(p.pos)} · OVR ${p.ovr}${p.stat ? ' · 올 시즌 ' + esc(p.stat) : ''}</span></li>`).join('') + '</ul>' +
+      (v.era === 'legend' ? '<p class="muted">역대 드림팀: 통산 능력치 기준으로 뽑습니다.</p>' : '<p class="muted">현역 대표: 능력치에 올 시즌 성적(우리 리그 선수는 내가 진행한 경기 기록)을 더해, 잘한 선수 순으로 뽑습니다.</p>');
   }
   $('intlStart').onclick = () => {
     touched = true;

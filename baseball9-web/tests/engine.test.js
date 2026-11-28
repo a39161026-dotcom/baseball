@@ -532,3 +532,32 @@ test('드래프트 10라운드 + 연도별 선수("09 양현종")', () => {
   // 한 팀에 같은 사람의 두 연도 버전도 가능 (사람 키가 다름)
   const keys = new Set(); svc.state.teams.forEach(t => t.roster.forEach(p => { assert.ok(!keys.has(p.person || p.id)); keys.add(p.person || p.id); }));
 });
+
+test('올스타·국가대표: 이번 시즌 잘한 선수가 뽑힘', () => {
+  const svc = createService(88);
+  svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18, team: '삼성라이온즈' });
+  svc.dispatch('POST', '/api/season/quick', { days: 9 });
+  const S = svc.state;
+  const grp = S.teams[0].group;
+  const names = r => new Set(r.map(p => p.name));
+  const squads = () => { const q = svc.dispatch('GET', '/api/allstar/squads').payload; return [...q.mine.roster, ...q.theirs.roster]; };
+  // 올스타: 우리 그룹 외야수 중 능력치 10위 선수 — 평소엔 못 뽑히지만 시즌 성적이 폭발하면 뽑힘
+  const of = S.teams.filter(t => t.group === grp).flatMap(t => t.roster).filter(p => p.pos === 'OF').sort((a, b) => b.ovr - a.ovr);
+  const hero = of[9];
+  assert.ok(!names(squads()).has(hero.name), '성적이 평범하면 못 뽑힘');
+  S.stats[hero.id] = { bat: { g: 9, pa: 40, ab: 34, h: 20, d2: 5, d3: 0, hr: 9, rbi: 25, bb: 6, k: 4, r: 15, sb: 1, cs: 0 } };
+  const after = squads();
+  assert.ok(names(after).has(hero.name), '성적이 폭발하면 올스타');
+  assert.ok(after.find(p => p.name === hero.name).stat.includes('홈런'), '선발 이유(성적)가 표시됨');
+  // 국가대표(현역): 대한민국 후보 중 능력치가 낮아도 올 시즌 성적이 좋으면 뽑힘
+  const base = svc.dispatch('POST', '/api/intl/new', { era: 'current', country: 'KOR' });
+  assert.strictEqual(base.status, 200);
+  const roster0 = svc.dispatch('GET', '/api/intl').payload.roster;
+  const kor = Object.values(S.players).filter(p => p.country === 'KOR' && p.pos === 'OF' && !roster0.some(r => r.name === p.name)).sort((a, b) => b.ovr - a.ovr);
+  const hero2 = kor[0];
+  assert.ok(hero2, '대표에 못 뽑힌 한국 외야수가 있음');
+  S.stats[hero2.id] = { bat: { g: 9, pa: 40, ab: 34, h: 22, d2: 6, d3: 0, hr: 11, rbi: 30, bb: 6, k: 3, r: 18, sb: 1, cs: 0 } };
+  svc.dispatch('POST', '/api/intl/new', { era: 'current', country: 'KOR' });
+  const roster1 = svc.dispatch('GET', '/api/intl').payload.roster;
+  assert.ok(roster1.some(r => r.name === hero2.name), '올 시즌 성적이 좋은 선수가 대표팀에 뽑힘');
+});

@@ -513,18 +513,35 @@ function createService(seed) {
 
   // ── 올스타전 ──
   const allStarDue = () => !!S.allStar && !S.allStar.done && S.allStar.day >= 0 && S.day >= S.allStar.day && !S.done;
-  // 팬 투표 점수: OVR + 이번 시즌 성적 보너스(±6)
-  function fanScore(p) {
+  // 이번 시즌(내가 진행한 경기) 성적 보너스: 잘한 선수일수록 올스타·국가대표에 잘 뽑힘. 표본이 적으면 반영을 줄임
+  function perfBonus(p) {
     const st = S.stats[p.id] || {};
-    let v = p.ovr;
-    if (p.isPitcher && st.pit && st.pit.outs >= 9) v += clamp((4.0 - st.pit.r * 27 / st.pit.outs) * 2, -6, 6);
-    if (!p.isPitcher && st.bat && st.bat.pa >= 20) {
-      const b = st.bat;
-      const ops = (b.h + b.bb) / b.pa + (b.h + b.d2 + 2 * b.d3 + 3 * b.hr) / Math.max(1, b.ab);
-      v += clamp((ops - 0.7) * 20, -6, 6);
+    if (p.isPitcher && st.pit && st.pit.outs >= 6) {
+      const w = Math.min(1, st.pit.outs / Math.max(15, S.day * 3)), era = st.pit.r * 27 / st.pit.outs;
+      return w * clamp((4.2 - era) * 3.5, -14, 18);
     }
-    return v;
+    if (!p.isPitcher && st.bat && st.bat.pa >= 10) {
+      const b = st.bat, w = Math.min(1, b.pa / Math.max(20, S.day * 2));
+      const ops = (b.h + b.bb) / b.pa + (b.h + b.d2 + 2 * b.d3 + 3 * b.hr) / Math.max(1, b.ab);
+      return w * clamp((ops - 0.72) * 45, -14, 20);
+    }
+    return 0;
   }
+  const fanScore = p => p.ovr + perfBonus(p);
+  // 선발 이유로 보여 줄 이번 시즌 성적 한 줄
+  function statLine(p) {
+    const st = S.stats[p.id] || {};
+    if (p.isPitcher && st.pit && st.pit.outs >= 3) {
+      const ip = st.pit.outs / 3;
+      return `평균자책 ${(st.pit.r * 9 / ip).toFixed(2)} · ${st.pit.w}승 ${st.pit.l}패 · ${st.pit.k}삼진 (${Math.floor(st.pit.outs / 3)}.${st.pit.outs % 3}이닝)`;
+    }
+    if (!p.isPitcher && st.bat && st.bat.pa >= 5) {
+      const b = st.bat, ops = (b.h + b.bb) / b.pa + (b.h + b.d2 + 2 * b.d3 + 3 * b.hr) / Math.max(1, b.ab);
+      return `타율 ${(b.ab ? b.h / b.ab : 0).toFixed(3).replace(/^0/, '')} · ${b.hr}홈런 · ${b.rbi}타점 · OPS ${ops.toFixed(3).replace(/^0/, '')}`;
+    }
+    return '';
+  }
+  const squadRows = ps => ps.map(p => ({ name: p.name, pos: p.pos, ovr: p.ovr, league: p.league, team: p.team, score: Math.round(fanScore(p) * 10) / 10, stat: statLine(p) }));
   function allStarSquads() {
     const myG = myTeam().group;
     const other = S.teams.map(t => t.group).find(g => g !== myG) || myG;
@@ -556,9 +573,10 @@ function createService(seed) {
   function buildNation(code, era) {
     const inEra = p => era === 'legend' ? true : S.mode === 'year' ? p.first <= S.year && p.last >= S.year : p.last >= LEAGUES[p.league].last - 2;     // 연도 선택 모드: 그 해 현역
     const cands = DB.filter(p => p.country === code && inEra(p));
-    const best = new Map();                 // 동일인은 가장 높은 능력치 한 명
-    cands.forEach(p => { const k = pk(p); if (!best.has(k) || best.get(k).ovr < p.ovr) best.set(k, p); });
-    return pickRoster([...best.values()], new Set()).map(p => p.id);
+    const score = era === 'legend' ? (p => p.ovr) : fanScore;          // 현역 대표는 이번 시즌 성적도 반영해 잘한 선수가 뽑힘 (역대 드림팀은 능력치만)
+    const best = new Map();                 // 동일인은 가장 높은 점수 한 명
+    cands.forEach(p => { const k = pk(p); if (!best.has(k) || score(best.get(k)) < score(p)) best.set(k, p); });
+    return pickRoster([...best.values()], new Set(), score).map(p => p.id);
   }
   function newIntl({ era = 'current', country = 'KOR' } = {}) {
     const codes = [...INTL_GROUPS.A, ...INTL_GROUPS.B];
@@ -630,7 +648,7 @@ function createService(seed) {
     if (!I) return { active: false, countries: [...INTL_GROUPS.A, ...INTL_GROUPS.B].map(c => ({ code: c, name: COUNTRY_NAME[c] })) };
     const opp = I.stage === 'done' ? null : intlUserMatch();
     const roster = I.teams[I.mine].ids.map(id => DB_BY_ID.get(id)).filter(Boolean)
-      .map(p => ({ name: p.name, pos: p.pos, ovr: p.ovr, league: p.league }));
+      .map(p => ({ name: p.name, pos: p.pos, ovr: p.ovr, league: p.league, team: p.team, stat: statLine(p), score: Math.round((I.era === 'legend' ? p.ovr : fanScore(p)) * 10) / 10 }));
     return {
       active: true, era: I.era, mine: I.mine, mineName: COUNTRY_NAME[I.mine], stage: I.stage, stageLabel: intlStageLabel(I),
       groups: { A: intlGroupTable('A'), B: intlGroupTable('B') },
@@ -1134,6 +1152,10 @@ function createService(seed) {
       res = [200, seasonView()];
     } else if (key === 'POST api/season/quick') res = quick(clamp(Number(body.days || 1), 1, 200));
     else if (key === 'GET api/stats') res = [200, statsView()];
+    else if (key === 'GET api/allstar/squads') {
+      const sq = allStarSquads();
+      res = [200, { mine: { name: sq.mine.name, roster: squadRows(sq.mine.roster) }, theirs: { name: sq.theirs.name, roster: squadRows(sq.theirs.roster) } }];
+    }
     else if (key === 'POST api/allstar/auto') {
       if (!allStarDue()) res = [409, { error: '지금은 올스타전이 없습니다.' }];
       else { autoAllStar(); res = [200, { allStar: S.allStar }]; }
