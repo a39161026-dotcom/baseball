@@ -255,12 +255,14 @@ test('올스타전: 시즌 중반에 열리고, 지휘하거나 자동으로 치
   assert.ok(s2.allStar.done && s2.done);
 });
 
-test('국가대표: 모든 나라 참가 — 조별리그 → 8강 → 4강 → 결승, 직접 지휘 경기도 반영', () => {
+test('국가대표: 2026 WBC 방식 — 20개국 5팀 4개 조 풀리그 → 8강 → 4강 → 결승, 직접 지휘 경기도 반영', () => {
   const svc = createService(54);
   let v = svc.dispatch('POST', '/api/intl/new', { era: 'legend', country: 'KOR' }).payload;
   assert.ok(v.active && v.roster.length === 20);
-  assert.ok(v.teamCount >= 12, '역대 기준 12개국 이상 참가: ' + v.teamCount);
-  ['대한민국', '일본', '미국', '도미니카공화국', '네덜란드', '호주'].forEach(n => assert.ok(v.countries.some(c => c.name === n), n + ' 참가'));
+  assert.strictEqual(v.teamCount, 20, 'WBC 20개국');
+  assert.deepStrictEqual(Object.keys(v.groups), ['A', 'B', 'C', 'D']);
+  assert.strictEqual(JSON.stringify([...v.groups.C.map(t => t.name)].sort()), JSON.stringify(['대만', '대한민국', '일본', '체코', '호주'].sort()), 'C조: 일본·한국·호주·체코·대만');
+  assert.ok(v.groups.D.some(t => t.name === '베네수엘라') && v.groups.B.some(t => t.name === '미국'));
   assert.ok(v.roster.some(p => p.name === '선동열'));
   const ids = svc.state.intl.teams.KOR.ids;
   assert.strictEqual(new Set(ids).size, ids.length);
@@ -270,12 +272,16 @@ test('국가대표: 모든 나라 참가 — 조별리그 → 8강 → 4강 → 
   svc.dispatch('POST', `/api/game/${g.state.gameId}/advance`, { mode: 'game', ack: true });
   v = svc.dispatch('GET', '/api/intl').payload;
   assert.strictEqual(v.results.length, 1);
-  assert.ok(Object.values(v.groups).flat().reduce((a, t) => a + t.w + t.l, 0) >= 8, '모든 조의 1라운드 경기가 치러짐');
+  assert.ok(Object.values(v.groups).flat().reduce((a, t) => a + t.w + t.l, 0) >= 8, '모든 조의 1라운드 경기가 치러짐 (5팀 조: 라운드마다 한 팀 휴식)');
+  for (let i = 0; i < 4; i++) v = svc.dispatch('POST', '/api/intl/quick', {}).payload.intl;      // 조별리그 나머지 4라운드
+  assert.strictEqual(v.stage, 'quarter');
+  Object.values(v.groups).forEach(g => g.forEach(tm => assert.strictEqual(tm.w + tm.l, 4, tm.name + ' 조별리그 4경기')));
+  assert.strictEqual(v.quarters.length, 4, '8강 4경기');
   let guard = 0;
-  while (v.stage !== 'done' && guard++ < 12) v = svc.dispatch('POST', '/api/intl/quick', {}).payload.intl;
+  while (v.stage !== 'done' && guard++ < 14) v = svc.dispatch('POST', '/api/intl/quick', {}).payload.intl;
   assert.strictEqual(v.stage, 'done');
   assert.ok(v.champion);
-  assert.strictEqual(v.results.length, 6, '조별 3 + 8강 + 4강 + 결승');
+  assert.strictEqual(v.results.length, 8, '조별 5라운드 + 8강 + 4강 + 결승');
   const saved = JSON.parse(JSON.stringify(svc.exportState()));
   const svc2 = createService(1);
   assert.ok(svc2.importState(saved));
@@ -694,16 +700,17 @@ test('2군: 신인은 2군에서 시작, 좋아지면 자동 콜업, 수동 이�
   assert.strictEqual(svc2.state.teams[0].roster.filter(p => p.farm).length, draftees.length);
 });
 
-test('국가대표(현역): 최근 6시즌 현역이 있는 모든 나라 참가, 쉬는 라운드(3팀 조) 처리', () => {
+test('국가대표(현역): WBC 20개국, 작은 나라 선택, 쉬는 라운드 처리', () => {
   const svc = createService(55);
   svc.dispatch('POST', '/api/season/new', { league: 'KBO', length: 18, team: '삼성라이온즈' });
   const v0 = svc.dispatch('GET', '/api/intl').payload;
-  assert.ok(v0.countriesByEra.current.length >= 9, '현역 기준 9개국 이상');
+  assert.strictEqual(v0.countriesByEra.current.length, 20, '현역 기준에서도 WBC 20개국');
   const v = svc.dispatch('POST', '/api/intl/new', { era: 'current', country: 'PAN' }).payload;
   assert.strictEqual(v.mineName, '파나마', '작은 나라도 선택 가능');
-  assert.ok(Object.keys(v.groups).length >= 3);
+  assert.strictEqual(Object.keys(v.groups).length, 4);
+  assert.ok(v.roster.length >= 14, '명단이 모자란 나라도 채워짐');
   let x = v, guard = 0;
-  while (x.stage !== 'done' && guard++ < 12) {
+  while (x.stage !== 'done' && guard++ < 14) {
     if (x.next) { const g = svc.dispatch('POST', '/api/game', { kind: 'intl' }); assert.strictEqual(g.status, 200); svc.dispatch('POST', `/api/game/${g.payload.state.gameId}/advance`, { mode: 'game', ack: true }); x = svc.dispatch('GET', '/api/intl').payload; }
     else x = svc.dispatch('POST', '/api/intl/quick', {}).payload.intl;      // 쉬는 라운드·탈락 후 진행
   }

@@ -102,10 +102,13 @@ COUNTRY = {
     "puerto rico": "PUR", "p.r.": "PUR", "mexico": "MEX", "taiwan": "TPE", "canada": "CAN", "can": "CAN",
     "panama": "PAN", "netherlands": "NED", "curacao": "NED", "aruba": "NED", "australia": "AUS",
     "colombia": "COL", "nicaragua": "NCA", "china": "CHN", "brazil": "BRA",
+    "italy": "ITA", "england": "GBR", "scotland": "GBR", "wales": "GBR", "united kingdom": "GBR", "uk": "GBR", "great britain": "GBR",
+    "israel": "ISR", "czech republic": "CZE", "czechia": "CZE", "czechoslovakia": "CZE",
 }
 COUNTRY_NAME = {"KOR": "대한민국", "JPN": "일본", "USA": "미국", "DOM": "도미니카공화국", "VEN": "베네수엘라",
                 "PUR": "푸에르토리코", "CUB": "쿠바", "MEX": "멕시코", "TPE": "대만", "CAN": "캐나다", "PAN": "파나마",
-                "NED": "네덜란드", "AUS": "호주", "COL": "콜롬비아", "NCA": "니카라과", "CHN": "중국", "BRA": "브라질"}
+                "NED": "네덜란드", "AUS": "호주", "COL": "콜롬비아", "NCA": "니카라과", "CHN": "중국", "BRA": "브라질",
+                "ITA": "이탈리아", "GBR": "영국", "ISR": "이스라엘", "CZE": "체코"}
 LEAGUE_LAST = {"KBO": 2026, "NPB": 2026, "MLB": 2026}
 # 리그 수준 보정: 능력치는 각 리그 평균 대비로 계산되므로, 리그끼리 맞붙을 때(월드 리그·국가대표·영입)를 위해
 # MLB 기준으로 NPB 와 KBO 를 낮춤. 리그 안의 순위는 바뀌지 않음.

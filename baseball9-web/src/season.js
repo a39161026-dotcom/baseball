@@ -678,22 +678,30 @@ function createService(seed) {
 
   // ── 국가대표 대회: 선수가 충분한 모든 나라가 참가 (조별리그 → 8강 → 4강 → 결승) ──
   const INTL_WINDOW = 5;                       // 현역 대표: 최근 6시즌 안에 뛴 선수
-  const GROUP_LETTERS = 'ABCD';
+  // 2026 WBC 조 편성 (20개국, 5팀씩 4개 조 풀리그 → 상위 2팀 8강 → 4강 → 결승)
+  const WBC_POOLS = { A: ['PUR', 'CUB', 'CAN', 'PAN', 'COL'], B: ['USA', 'MEX', 'ITA', 'GBR', 'BRA'], C: ['JPN', 'KOR', 'AUS', 'CZE', 'TPE'], D: ['DOM', 'VEN', 'NED', 'ISR', 'NCA'] };
+  const POOL_ROUNDS = 5;
   const inEraNation = (p, era) => era === 'legend' ? true : S.mode === 'year' ? p.first <= S.year && p.last >= S.year : p.last >= LEAGUES[p.league].last - INTL_WINDOW;
-  function buildNation(code, era) {
-    const cands = DB.filter(p => p.country === code && inEraNation(p, era));
-    const score = era === 'legend' ? (p => p.ovr) : fanScore;          // 현역 대표: 이번 시즌 기록 순 (기록이 없는 선수는 능력치로 뒤에서 채움). 역대 드림팀은 통산 능력치
+  // 대표팀 명단: 그 나라 선수 중 기록(현역)/능력치(역대 드림팀) 순. 선수가 모자란 나라(이탈리아·영국·이스라엘·체코 등)는 국적 정보가 없는 선수로 빈 자리를 채움
+  function buildNation(code, era, taken) {
+    const cands = DB.filter(p => p.country === code && inEraNation(p, era) && !taken.has(pk(p)));
+    const base = era === 'legend' ? (p => p.ovr) : fanScore;          // 현역 대표: 이번 시즌 기록 순 (기록이 없는 선수는 능력치로 뒤에서 채움). 역대 드림팀은 통산 능력치
     const best = new Map();                 // 동일인은 가장 높은 점수 한 명
-    cands.forEach(p => { const k = pk(p); if (!best.has(k) || score(best.get(k)) < score(p)) best.set(k, p); });
-    return pickRoster([...best.values()], new Set(), score).map(p => p.id);
+    cands.forEach(p => { const k = pk(p); if (!best.has(k) || base(best.get(k)) < base(p)) best.set(k, p); });
+    let list = [...best.values()];
+    const padIds = new Set();
+    if (TEAM_POS.length - list.length > 0 || list.filter(p => !p.isPitcher).length < 11 || list.filter(p => p.isPitcher).length < 9) {
+      const free = DB.filter(p => !p.country && inEraNation(p, era) && !taken.has(pk(p)) && !best.has(pk(p))).sort((a, b) => b.ovr - a.ovr);
+      const pad = free.filter(p => p.isPitcher).slice(0, 45).concat(free.filter(p => !p.isPitcher).slice(0, 45));        // 투수·야수 골고루
+      pad.forEach(p => padIds.add(p.id));
+      list = list.concat(pad);
+    }
+    const score = p => padIds.has(p.id) ? p.ovr - 1000 : base(p);          // 국적이 있는 선수가 항상 먼저
+    const picked = pickRoster(list, new Set(), score);
+    picked.forEach(p => taken.add(pk(p)));
+    return picked.map(p => p.id);
   }
-  // 선수 명단을 꾸릴 수 있는(야수 9·투수 5 이상) 나라 목록
-  function intlEligible(era) {
-    const cnt = {};
-    DB.forEach(p => { if (p.country && COUNTRY_NAME[p.country] && inEraNation(p, era)) { const c = cnt[p.country] = cnt[p.country] || { h: 0, p: 0 }; p.isPitcher ? c.p++ : c.h++; } });
-    return Object.keys(cnt).filter(c => cnt[c].h >= 9 && cnt[c].p >= 5);
-  }
-  function roundRobin(codes) {                 // 조 안 풀리그: 3라운드 (3팀 조는 라운드마다 한 팀이 쉼)
+  function roundRobin(codes) {                 // 조 안 풀리그: 5팀 조는 5라운드(라운드마다 한 팀이 쉼)
     const n = codes.length, arr = n % 2 ? [...codes, null] : [...codes], rounds = [];
     for (let r = 0; r < arr.length - 1; r++) {
       const m = [];
@@ -701,24 +709,21 @@ function createService(seed) {
       rounds.push(m);
       arr.splice(1, 0, arr.pop());
     }
-    while (rounds.length < 3) rounds.push([]);
+    while (rounds.length < POOL_ROUNDS) rounds.push([]);
     return rounds;
   }
   function newIntl({ era = 'current', country = 'KOR' } = {}) {
-    const teams = {};
-    intlEligible(era).forEach(c => {
-      const ids = buildNation(c, era);
+    const codes = Object.values(WBC_POOLS).flat().filter(c => COUNTRY_NAME[c]);
+    if (!codes.includes(country)) country = 'KOR';
+    const teams = {}, taken = new Set();
+    [country, ...codes.filter(c => c !== country)].forEach(c => {            // 내가 고른 나라부터 명단을 꾸림
+      const ids = buildNation(c, era, taken);
       const pl = ids.map(id => DB_BY_ID.get(id)).filter(Boolean);
-      if (pl.filter(p => !p.isPitcher).length < 9 || pl.filter(p => p.isPitcher).length < 5) return;
-      teams[c] = { code: c, name: COUNTRY_NAME[c], ids, w: 0, l: 0, rs: 0, ra: 0, sp: 0, power: pl.reduce((a, p) => a + p.ovr, 0) / pl.length };
+      teams[c] = { code: c, name: COUNTRY_NAME[c], ids, w: 0, l: 0, rs: 0, ra: 0, sp: 0, power: pl.reduce((a, p) => a + p.ovr, 0) / Math.max(1, pl.length) };
     });
-    const codes = Object.keys(teams).sort((a, b) => teams[b].power - teams[a].power);
-    if (!teams[country]) country = teams.KOR ? 'KOR' : codes[0];
-    const G = Math.max(2, Math.min(4, Math.ceil(codes.length / 4)));
     const groups = {};
-    for (let g = 0; g < G; g++) groups[GROUP_LETTERS[g]] = [];
-    codes.forEach((c, k) => { const row = Math.floor(k / G), g = row % 2 === 0 ? k % G : G - 1 - (k % G); groups[GROUP_LETTERS[g]].push(c); });      // 전력순 뱀 배치
-    const rounds = [0, 1, 2].map(r => Object.keys(groups).flatMap(g => roundRobin(groups[g])[r]));
+    Object.keys(WBC_POOLS).forEach(g => { groups[g] = WBC_POOLS[g].filter(c => teams[c]); });
+    const rounds = Array.from({ length: POOL_ROUNDS }, (_, r) => Object.keys(groups).flatMap(g => roundRobin(groups[g])[r] || []));
     S.intl = { era, mine: country, teams, groups, rounds, stage: 'group', round: 0, qf: null, semis: null, final: null, results: [], champion: null };
     dirty = true;
   }
@@ -750,11 +755,10 @@ function createService(seed) {
       .map(t => ({ code: t.code, name: t.name, w: t.w, l: t.l, rs: t.rs, ra: t.ra, mine: t.code === S.intl.mine }))
       .sort(intlCmp);
   }
-  function intlQualifiers() {                  // 조 순위 → 8강(또는 4강) 진출팀을 시드 순으로
-    const I = S.intl, K = Object.keys(I.groups).length >= 3 ? 8 : 4;
-    const rows = [];
-    Object.keys(I.groups).forEach(g => intlGroupTable(g).forEach((t, rank) => rows.push({ ...t, rank })));
-    return rows.sort((a, b) => a.rank - b.rank || intlCmp(a, b)).slice(0, K).map(t => t.code);
+  function intlQualifiers() {                  // 조별 상위 2팀 → 8강 (WBC 방식 교차 대진)
+    const I = S.intl, top = {};
+    Object.keys(I.groups).forEach(g => { top[g] = intlGroupTable(g).map(t => t.code); });
+    return { A1: top.A[0], A2: top.A[1], B1: top.B[0], B2: top.B[1], C1: top.C[0], C2: top.C[1], D1: top.D[0], D2: top.D[1] };
   }
   // 이번 라운드 경기를 모두 치르고 다음 단계로 (userEngine 이 있으면 그 경기 결과를 사용)
   function intlFinishRound(userEngine) {
@@ -773,13 +777,13 @@ function createService(seed) {
     I.results.push({ stage: intlStageLabel(I), games });
     if (I.stage === 'group') {
       I.round++;
-      if (I.round >= 3) {
+      if (I.round >= POOL_ROUNDS) {
         const q = intlQualifiers();
-        if (q.length === 8) { I.qf = [[q[0], q[7]], [q[3], q[4]], [q[1], q[6]], [q[2], q[5]]]; I.stage = 'quarter'; }
-        else { I.semis = [[q[0], q[3]], [q[1], q[2]]]; I.stage = 'semi'; }
+        I.qf = [[q.A1, q.B2], [q.B1, q.A2], [q.C1, q.D2], [q.D1, q.C2]];       // 8강: A1-B2, B1-A2, C1-D2, D1-C2
+        I.stage = 'quarter';
       }
     } else if (I.stage === 'quarter') {
-      I.semis = [[winners[0], winners[1]], [winners[2], winners[3]]];
+      I.semis = [[winners[1], winners[2]], [winners[0], winners[3]]];         // 4강: (B1-A2 승자 vs C1-D2 승자), (A1-B2 승자 vs D1-C2 승자)
       I.stage = 'semi';
     } else if (I.stage === 'semi') {
       I.final = winners;
@@ -787,14 +791,14 @@ function createService(seed) {
     } else if (I.stage === 'final') {
       I.champion = winners[0];
       I.stage = 'done';
-      pushArticle({ tag: '국가대표', title: `${COUNTRY_NAME[I.champion]}, 국가대표 대회 우승`, sub: `${Object.keys(I.teams).length}개국 참가`, body: `${Object.keys(I.teams).length}개국이 겨룬 국가대표 대회에서 ${COUNTRY_NAME[I.champion]}${hasBatchim(COUNTRY_NAME[I.champion]) ? '이' : '가'} 우승했다. 우리 대표팀은 ${COUNTRY_NAME[I.mine]}.` });
+      pushArticle({ tag: '국가대표', title: `${COUNTRY_NAME[I.champion]}, 월드 베이스볼 클래식 우승`, sub: `${Object.keys(I.teams).length}개국 참가`, body: `${Object.keys(I.teams).length}개국이 겨룬 월드 베이스볼 클래식에서 ${COUNTRY_NAME[I.champion]}${hasBatchim(COUNTRY_NAME[I.champion]) ? '이' : '가'} 우승했다. 우리 대표팀은 ${COUNTRY_NAME[I.mine]}.` });
     }
     dirty = true;
   }
-  const intlCountryList = era => { const list = intlEligible(era).map(c => ({ code: c, name: COUNTRY_NAME[c] })); return list.sort((a, b) => a.name.localeCompare(b.name, 'ko')); };
+  const intlCountryList = () => Object.keys(WBC_POOLS).flatMap(g => WBC_POOLS[g].filter(c => COUNTRY_NAME[c]).map(c => ({ code: c, name: COUNTRY_NAME[c], pool: g })));
   function intlView() {
     const I = S.intl;
-    const byEra = { current: intlCountryList('current'), legend: intlCountryList('legend') };
+    const byEra = { current: intlCountryList(), legend: intlCountryList() };
     if (!I) return { active: false, countries: byEra.current, countriesByEra: byEra };
     const opp = I.stage === 'done' ? null : intlUserMatch();
     const roster = I.teams[I.mine].ids.map(id => DB_BY_ID.get(id)).filter(Boolean)

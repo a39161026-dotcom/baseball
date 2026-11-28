@@ -525,11 +525,11 @@
   <section id="intl" hidden>
     <div class="panel" id="intlSetup">
       <p class="title">🌏 국가대표 대회</p>
-      <p class="muted" style="margin:0 0 10px">선수 명단을 꾸릴 수 있는 <b>모든 나라</b>가 참가합니다(현역 기준 약 10개국, 역대 드림팀 기준 14개국). 3~4팀씩 조를 나눠 조별리그(3라운드) → 8강 → 4강 → 결승을 치릅니다. 대표팀은 국적(KBO)·출생국(NPB·MLB) 기준으로 3개 리그 전체에서 뽑고, 소속팀 피로와는 따로 갑니다.</p>
+      <p class="muted" style="margin:0 0 10px"><b>2026 월드 베이스볼 클래식(WBC)</b> 방식: 20개국이 5팀씩 4개 조(A~D)로 나뉘어 조별 풀리그(팀당 4경기)를 치르고, 각 조 상위 2팀이 8강 → 4강 → 결승을 겨룹니다. 대표팀은 국적(KBO)·출생국(NPB·MLB) 기준으로 3개 리그 전체에서 뽑습니다. 이탈리아·영국·이스라엘·체코처럼 선수 정보가 모자란 나라는 국적 미상 선수로 빈 자리를 채웁니다. 소속팀 피로와는 따로 갑니다.</p>
       <div class="row">
         <label class="lbl" for="intlCountry">우리나라</label><select id="intlCountry"></select>
         <label class="lbl" for="intlEra">대표팀</label>
-        <select id="intlEra"><option value="current" selected>현역 대표 (최근 6시즌 현역)</option><option value="legend">역대 드림팀</option></select>
+        <select id="intlEra"><option value="current" selected>현역 대표 (최근 6시즌 현역)</option><option value="legend">역대 드림팀 (통산 능력치)</option></select>
         <button class="gold" id="intlStart">대회 시작</button>
       </div>
     </div>
@@ -1459,7 +1459,7 @@
     const sel = $('intlCountry'), prev = sel.value, list = (byEra || {})[$('intlEra').value] || [];
     if (sel.dataset.era === $('intlEra').value && sel.options.length === list.length) return;
     sel.innerHTML = ''; sel.dataset.era = $('intlEra').value;
-    list.forEach(c => { const o = document.createElement('option'); o.value = c.code; o.textContent = c.name; sel.appendChild(o); });
+    list.forEach(c => { const o = document.createElement('option'); o.value = c.code; o.textContent = `${c.name} (${c.pool}조)`; sel.appendChild(o); });
     sel.value = list.some(c => c.code === prev) ? prev : (list.some(c => c.code === 'KOR') ? 'KOR' : (list[0] || {}).code);
   }
   $('intlEra').onchange = () => { $('intlCountry').dataset.era = ''; renderIntl(); };
@@ -1481,7 +1481,7 @@
     Object.keys(v.groups).forEach(g => { $('intlG' + g).innerHTML = table(v.groups[g]); });
     $('intlBracket').innerHTML =
       (v.quarters ? v.quarters.map((m, i) => `<div><b>8강 ${i + 1}</b><br>${esc(m[0])} vs ${esc(m[1])}</div>`).join('') : '') +
-      (v.semis ? v.semis.map((m, i) => `<div><b>4강 ${i + 1}</b><br>${esc(m[0])} vs ${esc(m[1])}</div>`).join('') : '<div class="muted">조 상위 8팀(3조 이상이면 3위 중 성적 상위 포함)이 토너먼트에 올라갑니다</div>') +
+      (v.semis ? v.semis.map((m, i) => `<div><b>4강 ${i + 1}</b><br>${esc(m[0])} vs ${esc(m[1])}</div>`).join('') : '<div class="muted">각 조 상위 2팀(총 8팀)이 8강에 올라갑니다</div>') +
       (v.final ? `<div><b>결승</b><br>${esc(v.final[0])} vs ${esc(v.final[1])}</div>` : '') +
       (v.champion ? `<div><b>🏆 우승</b><br>${esc(v.champion)}</div>` : '');
     $('intlResults').innerHTML = v.results.length
